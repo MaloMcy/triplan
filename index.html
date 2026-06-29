@@ -75,6 +75,11 @@
   .view{display:none;}
   .view.active{display:block;animation:fade .18s ease;}
   @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+  /* volets glissants (swipe entre semaines) */
+  #calView,#statsView{position:relative;}
+  .wk-pane{width:100%;will-change:transform;}
+  .wk-pane.wk-incoming{position:absolute;top:0;left:0;}
+  .wk-anim{transition:transform .26s cubic-bezier(.32,.72,0,1);}
 
   /* ---------- Day card ---------- */
   .day{
@@ -388,10 +393,11 @@ function actsFor(dateStr, slot){
     .filter(a => a.date===dateStr && a.slot===slot)
     .sort((a,b)=> (a.created||0)-(b.created||0));
 }
-function weekActs(){
-  const start = isoDate(weekStart), end = isoDate(addDays(weekStart,6));
+function weekActsFor(monday){
+  const start = isoDate(monday), end = isoDate(addDays(monday,6));
   return Object.values(state.activities).filter(a => a.date>=start && a.date<=end);
 }
+function weekActs(){ return weekActsFor(weekStart); }
 
 /* ============================================================
    RENDER — Calendrier
@@ -412,11 +418,10 @@ function renderWeekRange(){
   document.querySelector("#weekRange span").textContent = `Semaine ${wn}`;
 }
 
-function renderCalendar(){
-  renderWeekRange();
+function calWeekHtml(monday){
   let html = "";
   for(let i=0;i<7;i++){
-    const d = addDays(weekStart,i);
+    const d = addDays(monday,i);
     const ds = isoDate(d);
     const isToday = ds===todayStr;
     html += `<div class="day${isToday?" is-today":""}">
@@ -446,7 +451,11 @@ function renderCalendar(){
     }
     html += `</div></div>`;
   }
-  calView.innerHTML = html;
+  return html;
+}
+function renderCalendar(){
+  renderWeekRange();
+  calView.innerHTML = `<div class="wk-pane">${calWeekHtml(weekStart)}</div>`;
 }
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
@@ -454,9 +463,9 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<
    RENDER — Statistiques (semaine affichée)
    ============================================================ */
 const statsView = document.getElementById("statsView");
-function renderStats(){
-  const acts = weekActs().filter(a => a.sport!=="commentaire");
-  const end = addDays(weekStart,6);
+function bilanWeekHtml(monday){
+  const acts = weekActsFor(monday).filter(a => a.sport!=="commentaire");
+  const end = addDays(monday,6);
   const agg = {}; for(const k of SPORT_KEYS) agg[k] = { distP:0,distD:0,durP:0,durD:0 };
   let totDurP=0, totDurD=0;
   for(const a of acts){
@@ -466,12 +475,12 @@ function renderStats(){
   }
   let html = `<div class="stats-head">
     <h2>Bilan de la semaine</h2>
-    <p>${weekStart.getDate()} ${MONTHS[weekStart.getMonth()]} – ${end.getDate()} ${MONTHS[end.getMonth()]} ${end.getFullYear()}</p>
+    <p>${monday.getDate()} ${MONTHS[monday.getMonth()]} – ${end.getDate()} ${MONTHS[end.getMonth()]} ${end.getFullYear()}</p>
   </div>`;
 
   if(acts.length===0){
     html += `<div class="empty-note">Aucune séance cette semaine.<br>Ajoute des activités dans le calendrier.</div>`;
-    statsView.innerHTML = html; return;
+    return html;
   }
 
   // total temps EN HAUT
@@ -501,7 +510,10 @@ function renderStats(){
       <div class="stat-sub"><span>Avancement</span><span>${pct}%</span></div>
     </div>`;
   }
-  statsView.innerHTML = html;
+  return html;
+}
+function renderStats(){
+  statsView.innerHTML = `<div class="wk-pane">${bilanWeekHtml(weekStart)}</div>`;
 }
 
 /* ============================================================
@@ -566,9 +578,32 @@ const scrim = document.getElementById("scrim");
 const sheet = document.getElementById("sheet");
 let draft = null; // activité en cours d'édition/création
 
-function openSheet(html){ sheet.innerHTML = `<div class="grabber"></div>` + html; scrim.classList.add("open"); sheet.classList.add("open"); }
-function closeSheet(){ scrim.classList.remove("open"); sheet.classList.remove("open"); draft=null; }
+function openSheet(html){ sheet.style.transition=""; sheet.style.transform=""; sheet.scrollTop=0; sheet.innerHTML = `<div class="grabber"></div>` + html; scrim.classList.add("open"); sheet.classList.add("open"); }
+function closeSheet(){ scrim.classList.remove("open"); sheet.classList.remove("open"); sheet.style.transform=""; draft=null; }
 scrim.addEventListener("click", closeSheet);
+
+/* glisser le volet vers le bas pour le fermer */
+let shDrag=null;
+sheet.addEventListener("touchstart", e=>{
+  if(e.touches.length!==1){ shDrag=null; return; }
+  shDrag = { y:e.touches[0].clientY, atTop: sheet.scrollTop<=0, active:false };
+},{passive:true});
+sheet.addEventListener("touchmove", e=>{
+  if(!shDrag) return;
+  const dy = e.touches[0].clientY - shDrag.y;
+  if(!shDrag.active){
+    if(dy>6 && shDrag.atTop){ shDrag.active=true; sheet.style.transition="none"; }
+    else { shDrag=null; return; }
+  }
+  if(dy>0){ e.preventDefault(); sheet.style.transform=`translateY(${dy}px)`; }
+},{passive:false});
+sheet.addEventListener("touchend", e=>{
+  if(!shDrag || !shDrag.active){ shDrag=null; return; }
+  const dy = e.changedTouches[0].clientY - shDrag.y;
+  sheet.style.transition="";
+  if(dy>110){ closeSheet(); } else { sheet.style.transform="translateY(0)"; }
+  shDrag=null;
+},{passive:true});
 
 /* --- formulaire activité (création + édition) --- */
 function sportPickerHtml(sel){
@@ -892,20 +927,64 @@ function activateTab(t){
 }
 document.querySelectorAll(".tab").forEach(tab=> tab.onclick = ()=> activateTab(tab.dataset.tab));
 
-// swipe horizontal pour changer de semaine (onglet calendrier)
+// swipe carousel : changer de semaine en suivant le doigt (Calendrier & Bilan)
+function activeSwipeView(){
+  if(calView.classList.contains("active"))   return { view:calView,   html:calWeekHtml };
+  if(statsView.classList.contains("active")) return { view:statsView, html:bilanWeekHtml };
+  return null;
+}
 let sw=null;
 main.addEventListener("touchstart", e=>{
-  if(e.touches.length!==1 || drag) { sw=null; return; }
-  sw = { x:e.touches[0].clientX, y:e.touches[0].clientY, t:Date.now() };
+  if(e.touches.length!==1 || drag){ sw=null; return; }
+  const info = activeSwipeView();
+  if(!info){ sw=null; return; }
+  sw = { x:e.touches[0].clientX, y:e.touches[0].clientY, info,
+         pane:info.view.querySelector(".wk-pane"),
+         width:info.view.clientWidth||window.innerWidth,
+         dir:0, incoming:null, active:false, cur:0 };
 },{passive:true});
-main.addEventListener("touchend", e=>{
-  if(!sw || drag) return;
-  const t = e.changedTouches[0];
-  const dx = t.clientX - sw.x, dy = t.clientY - sw.y;
-  if(Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)*1.8 && (Date.now()-sw.t)<600){
-    if(!document.getElementById("calView").classList.contains("active")) return;
-    weekStart = addDays(weekStart, dx<0 ? 7 : -7);
-    renderAll();
+
+main.addEventListener("touchmove", e=>{
+  if(!sw) return;
+  const dx = e.touches[0].clientX - sw.x, dy = e.touches[0].clientY - sw.y;
+  if(!sw.active){
+    if(Math.abs(dy)>10 && Math.abs(dy)>=Math.abs(dx)){ sw=null; return; } // scroll vertical
+    if(Math.abs(dx)>12 && Math.abs(dx)>Math.abs(dy)){
+      if(drag){ clearTimeout(drag.timer); cleanupDrag(); }
+      sw.active = true;
+      sw.dir = dx<0 ? 1 : -1;                 // 1 = semaine suivante, -1 = précédente
+      const inc = document.createElement("div");
+      inc.className = "wk-pane wk-incoming";
+      inc.style.transform = `translateX(${sw.dir>0?100:-100}%)`;
+      inc.innerHTML = sw.info.html(addDays(weekStart, sw.dir*7));
+      sw.info.view.appendChild(inc);
+      sw.incoming = inc;
+      sw.pane.classList.remove("wk-anim"); inc.classList.remove("wk-anim");
+    } else { return; }
+  }
+  if(sw.active){
+    e.preventDefault();
+    const mv = sw.dir>0 ? Math.min(0,dx) : Math.max(0,dx);
+    sw.cur = mv;
+    sw.pane.style.transform = `translateX(${mv}px)`;
+    sw.incoming.style.transform = `translateX(calc(${sw.dir>0?100:-100}% + ${mv}px))`;
+  }
+},{passive:false});
+
+main.addEventListener("touchend", ()=>{
+  if(!sw){ return; }
+  if(!sw.active){ sw=null; return; }
+  const pane=sw.pane, inc=sw.incoming, dir=sw.dir, width=sw.width, mv=sw.cur;
+  const commit = Math.abs(mv) > width*0.22;
+  pane.classList.add("wk-anim"); inc.classList.add("wk-anim");
+  if(commit){
+    pane.style.transform = `translateX(${dir>0?-width:width}px)`;
+    inc.style.transform  = `translateX(0)`;
+    setTimeout(()=>{ weekStart = addDays(weekStart, dir*7); renderCalendar(); renderStats(); }, 270);
+  } else {
+    pane.style.transform = `translateX(0)`;
+    inc.style.transform  = `translateX(${dir>0?100:-100}%)`;
+    setTimeout(()=>{ if(inc.parentNode) inc.remove(); pane.classList.remove("wk-anim"); pane.style.transform=""; }, 270);
   }
   sw=null;
 },{passive:true});
