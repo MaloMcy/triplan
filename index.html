@@ -78,7 +78,8 @@
   /* volets glissants (swipe entre semaines) */
   #calView,#statsView{position:relative;}
   .wk-pane{width:100%;will-change:transform;}
-  .wk-pane.wk-incoming{position:absolute;top:0;left:0;}
+  .wk-pane.wk-incoming{position:absolute;top:0;left:0;z-index:1;}      /* semaine dévoilée, en dessous */
+  .wk-pane.wk-top{position:relative;z-index:2;background:var(--bg);min-height:100%;}  /* volet courant, au-dessus */
   .wk-anim{transition:transform .26s cubic-bezier(.32,.72,0,1);}
 
   /* ---------- Day card ---------- */
@@ -954,20 +955,19 @@ main.addEventListener("touchmove", e=>{
       sw.active = true;
       sw.dir = dx<0 ? 1 : -1;                 // 1 = semaine suivante, -1 = précédente
       const inc = document.createElement("div");
-      inc.className = "wk-pane wk-incoming";
-      inc.style.transform = `translateX(${sw.dir>0?100:-100}%)`;
+      inc.className = "wk-pane wk-incoming";   // posée dessous, fixe (translateX 0)
       inc.innerHTML = sw.info.html(addDays(weekStart, sw.dir*7));
       sw.info.view.appendChild(inc);
       sw.incoming = inc;
-      sw.pane.classList.remove("wk-anim"); inc.classList.remove("wk-anim");
+      sw.pane.classList.add("wk-top");          // le volet courant passe au-dessus, part avec le doigt
+      sw.pane.classList.remove("wk-anim");
     } else { return; }
   }
   if(sw.active){
     e.preventDefault();
     const mv = sw.dir>0 ? Math.min(0,dx) : Math.max(0,dx);
     sw.cur = mv;
-    sw.pane.style.transform = `translateX(${mv}px)`;
-    sw.incoming.style.transform = `translateX(calc(${sw.dir>0?100:-100}% + ${mv}px))`;
+    sw.pane.style.transform = `translateX(${mv}px)`;   // seule la semaine du dessus bouge ; celle du dessous reste fixe
   }
 },{passive:false});
 
@@ -976,15 +976,13 @@ main.addEventListener("touchend", ()=>{
   if(!sw.active){ sw=null; return; }
   const pane=sw.pane, inc=sw.incoming, dir=sw.dir, width=sw.width, mv=sw.cur;
   const commit = Math.abs(mv) > width*0.22;
-  pane.classList.add("wk-anim"); inc.classList.add("wk-anim");
+  pane.classList.add("wk-anim");
   if(commit){
-    pane.style.transform = `translateX(${dir>0?-width:width}px)`;
-    inc.style.transform  = `translateX(0)`;
+    pane.style.transform = `translateX(${dir>0?-width:width}px)`;   // le volet part complètement, dévoilant la semaine dessous
     setTimeout(()=>{ weekStart = addDays(weekStart, dir*7); renderCalendar(); renderStats(); }, 270);
   } else {
-    pane.style.transform = `translateX(0)`;
-    inc.style.transform  = `translateX(${dir>0?100:-100}%)`;
-    setTimeout(()=>{ if(inc.parentNode) inc.remove(); pane.classList.remove("wk-anim"); pane.style.transform=""; }, 270);
+    pane.style.transform = `translateX(0)`;                          // revient recouvrir la semaine du dessous
+    setTimeout(()=>{ if(inc.parentNode) inc.remove(); pane.classList.remove("wk-anim","wk-top"); pane.style.transform=""; }, 270);
   }
   sw=null;
 },{passive:true});
