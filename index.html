@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#0F1722">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TriPlan">
+<title>TriPlan — Planning triathlon</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230F1722'/%3E%3Ccircle cx='32' cy='50' r='11' fill='%231E88C7'/%3E%3Ccircle cx='50' cy='50' r='11' fill='%232FA86A'/%3E%3Ccircle cx='68' cy='50' r='11' fill='%23E8643C'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#EEF1F5;
+    --surface:#FFFFFF;
+    --surface-2:#F6F8FA;
+    --ink:#16202E;
+    --muted:#5B6675;
+    --faint:#8A94A3;
+    --line:#E1E6EC;
+    --line-strong:#CDD5DE;
+    --course:#2FA86A;
+    --velo:#E8643C;
+    --natation:#1E88C7;
+    --commentaire:#7A8595;
+    --accent:#E8643C;   /* badge "aujourd'hui" */
+    --success:#2FA86A;  /* bouton valider */
+    --shadow:0 1px 2px rgba(16,32,48,.06),0 8px 24px rgba(16,32,48,.08);
+    --radius:14px;
+    --tap:44px;
+    --safe-bottom:env(safe-area-inset-bottom,0px);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-size:15px;line-height:1.4;
+    overscroll-behavior-y:none;
+    -webkit-text-size-adjust:100%;
+  }
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+  input,select{font-family:inherit;font-size:16px;}
+
+  /* ---------- App shell ---------- */
+  #app{display:flex;flex-direction:column;height:100dvh;max-width:680px;margin:0 auto;background:var(--bg);}
+  header.topbar{
+    position:sticky;top:0;z-index:30;
+    background:#0F1722;color:#fff;
+    padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 12px;
+    box-shadow:0 1px 0 rgba(255,255,255,.04);
+  }
+  .topbar-row{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.3px;font-size:17px;}
+  .brand .dots{display:flex;gap:3px;}
+  .brand .dots i{width:9px;height:9px;border-radius:50%;display:block;}
+  .icon-btn{
+    width:38px;height:38px;border-radius:10px;display:grid;place-items:center;
+    background:rgba(255,255,255,.08);color:#fff;font-size:18px;transition:background .15s;
+  }
+  .icon-btn:active{background:rgba(255,255,255,.2);}
+
+  /* Week nav */
+  .weeknav{display:flex;align-items:center;justify-content:space-between;margin-top:12px;gap:8px;}
+  .weeknav .range{display:flex;flex-direction:column;align-items:center;line-height:1.15;}
+  .weeknav .range b{font-size:15px;font-weight:600;}
+  .weeknav .range span{font-size:11.5px;color:#9aa6b6;text-transform:uppercase;letter-spacing:.6px;}
+  .nav-arrow{width:var(--tap);height:36px;border-radius:9px;background:rgba(255,255,255,.08);display:grid;place-items:center;font-size:20px;}
+  .nav-arrow:active{background:rgba(255,255,255,.2);}
+  .today-btn{font-size:12px;padding:7px 11px;border-radius:8px;background:rgba(255,255,255,.1);font-weight:600;letter-spacing:.3px;}
+  .today-btn:active{background:rgba(255,255,255,.22);}
+
+  /* ---------- Main scroll ---------- */
+  main{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:12px 12px calc(84px + var(--safe-bottom));}
+  .view{display:none;}
+  .view.active{display:block;animation:fade .18s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+  /* ---------- Day card ---------- */
+  .day{
+    background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);
+    margin-bottom:10px;overflow:hidden;border:1px solid var(--line);
+  }
+  .day.is-today{border-color:#0F1722;box-shadow:0 0 0 1px #0F1722,var(--shadow);}
+  .day-head{
+    display:flex;align-items:baseline;gap:8px;padding:9px 13px;
+    background:var(--surface-2);border-bottom:1px solid var(--line);
+  }
+  .day-head .dow{font-weight:700;font-size:14px;text-transform:capitalize;}
+  .day-head .dnum{font-size:13px;color:var(--muted);}
+  .day.is-today .day-head{background:#0F1722;}
+  .day.is-today .day-head .dow,.day.is-today .day-head .dnum{color:#fff;}
+  .day.is-today .day-head .dnum{color:#9aa6b6;}
+  .badge-today{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.5px;background:var(--accent);color:#fff;padding:2px 7px;border-radius:20px;text-transform:uppercase;}
+
+  .slots{display:grid;grid-template-columns:1fr 1fr 1fr;}
+  .slot{border-right:1px solid var(--line);min-height:78px;display:flex;flex-direction:column;padding:7px 7px 8px;}
+  .slot:last-child{border-right:none;}
+  .slot-label{font-size:10px;font-weight:700;letter-spacing:.7px;color:var(--faint);text-transform:uppercase;margin-bottom:5px;}
+  .slot-body{display:flex;flex-direction:column;gap:5px;flex:1;}
+  .slot.drop-target{background:#EAF4FB;outline:2px dashed var(--natation);outline-offset:-3px;border-radius:8px;}
+
+  /* ---------- Activity card ---------- */
+  .act{
+    --c:var(--muted);
+    border-radius:9px;padding:6px 7px;position:relative;
+    font-size:12px;line-height:1.25;
+    background:color-mix(in srgb,var(--c) 14%,#fff);
+    color:color-mix(in srgb,var(--c) 72%,#1a2230);
+    border:1.5px dashed color-mix(in srgb,var(--c) 55%,#fff);
+    transition:transform .12s,box-shadow .12s;
+    touch-action:manipulation;user-select:none;
+  }
+  .act.done{
+    background:var(--c);color:#fff;border:1.5px solid var(--c);
+    box-shadow:0 2px 6px color-mix(in srgb,var(--c) 35%,transparent);
+  }
+  .act .t{font-weight:700;display:flex;align-items:center;gap:4px;word-break:break-word;}
+  .act .t .chk{font-size:11px;}
+  .act .d{font-variant-numeric:tabular-nums;opacity:.92;margin-top:1px;font-weight:600;}
+  .act.comment .t{font-style:italic;font-weight:600;}
+  .act.dragging{opacity:.35;}
+  .act-ghost{
+    position:fixed;z-index:200;pointer-events:none;width:120px;
+    box-shadow:0 12px 28px rgba(16,32,48,.28);transform:scale(1.04) rotate(-1.5deg);
+  }
+  .add-slot{
+    margin-top:auto;width:100%;height:24px;border-radius:8px;border:1.5px dashed var(--line-strong);
+    color:var(--faint);font-size:16px;font-weight:600;display:grid;place-items:center;
+    background:transparent;transition:.12s;
+  }
+  .add-slot:active{background:var(--surface-2);border-color:var(--muted);color:var(--muted);}
+  .slot-body:not(:empty) + .add-slot{margin-top:5px;}
+
+  /* ---------- Stats view ---------- */
+  .stats-head{margin:2px 2px 12px;}
+  .stats-head h2{margin:0;font-size:19px;font-weight:700;}
+  .stats-head p{margin:3px 0 0;color:var(--muted);font-size:13px;}
+  .stat-card{
+    background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);
+    border:1px solid var(--line);padding:14px 15px;margin-bottom:10px;
+    border-left:5px solid var(--c,var(--line));
+  }
+  .stat-top{display:flex;align-items:center;gap:9px;margin-bottom:11px;}
+  .stat-dot{width:11px;height:11px;border-radius:50%;background:var(--c);}
+  .stat-top h3{margin:0;font-size:15px;font-weight:700;flex:1;}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px;}
+  .metric{background:var(--surface-2);border-radius:10px;padding:9px 11px;}
+  .metric .lbl{font-size:10.5px;font-weight:700;letter-spacing:.5px;color:var(--faint);text-transform:uppercase;}
+  .metric .val{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:2px;}
+  .metric .val small{font-size:12px;font-weight:600;color:var(--muted);}
+  .metric.done .val{color:var(--c);}
+  .progress{height:6px;border-radius:6px;background:var(--line);margin-top:11px;overflow:hidden;}
+  .progress i{display:block;height:100%;background:var(--c);border-radius:6px;transition:width .3s;}
+  .stat-sub{font-size:11.5px;color:var(--muted);margin-top:7px;display:flex;justify-content:space-between;}
+  .total-card{background:#0F1722;color:#fff;border:none;border-left:5px solid #fff;}
+  .total-card .metric{background:rgba(255,255,255,.07);}
+  .total-card .metric .lbl{color:#9aa6b6;}
+  .total-card .metric .val small{color:#9aa6b6;}
+  .empty-note{text-align:center;color:var(--faint);font-size:13px;padding:30px 10px;}
+
+  /* ---------- Statistiques : liste des semaines ---------- */
+  .week-row{display:block;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:13px 15px;margin-bottom:9px;transition:background .12s;}
+  .week-row:active{background:var(--surface-2);}
+  .week-row-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;}
+  .week-id{display:flex;flex-direction:column;line-height:1.2;}
+  .week-id b{font-size:15px;font-weight:700;}
+  .week-id span{font-size:12px;color:var(--muted);}
+  .week-hours{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .week-hours small{font-size:12px;color:var(--muted);font-weight:600;}
+  .week-vol{display:flex;gap:8px;flex-wrap:wrap;}
+  .vol-chip{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink);background:var(--surface-2);border-radius:20px;padding:4px 11px 4px 9px;}
+  .vol-chip i{width:9px;height:9px;border-radius:50%;background:var(--c);display:block;flex:none;}
+  .vol-chip small{font-size:11px;color:var(--muted);font-weight:600;}
+
+  /* ---------- Bottom tab bar ---------- */
+  .tabbar{
+    position:fixed;left:0;right:0;bottom:0;z-index:40;
+    max-width:680px;margin:0 auto;
+    display:grid;grid-template-columns:1fr 1fr 1fr;
+    background:rgba(255,255,255,.92);backdrop-filter:blur(12px);
+    border-top:1px solid var(--line);
+    padding-bottom:var(--safe-bottom);
+  }
+  .tab{
+    display:flex;flex-direction:column;align-items:center;gap:2px;
+    padding:9px 0 10px;color:var(--faint);font-size:11px;font-weight:600;letter-spacing:.2px;
+  }
+  .tab svg{width:23px;height:23px;}
+  .tab.active{color:#0F1722;}
+
+  /* ---------- Sheet / modal ---------- */
+  .scrim{position:fixed;inset:0;background:rgba(16,32,48,.45);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s;}
+  .scrim.open{opacity:1;pointer-events:auto;}
+  .sheet{
+    position:fixed;left:0;right:0;bottom:0;z-index:60;max-width:680px;margin:0 auto;
+    background:var(--surface);border-radius:20px 20px 0 0;
+    transform:translateY(100%);transition:transform .26s cubic-bezier(.32,.72,0,1);
+    padding:8px 18px calc(20px + var(--safe-bottom));max-height:90dvh;overflow-y:auto;
+    box-shadow:0 -8px 30px rgba(16,32,48,.18);
+  }
+  .sheet.open{transform:translateY(0);}
+  .grabber{width:40px;height:4px;border-radius:4px;background:var(--line-strong);margin:8px auto 14px;}
+  .sheet h2{margin:0 0 16px;font-size:18px;font-weight:700;}
+  .field{margin-bottom:15px;}
+  .field>label{display:block;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin-bottom:7px;}
+  .sport-pick{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .sport-pick button{
+    border:2px solid var(--line);border-radius:11px;padding:11px 4px;font-weight:700;font-size:13px;
+    color:var(--muted);background:var(--surface);display:flex;flex-direction:column;align-items:center;gap:5px;transition:.12s;
+  }
+  .sport-pick button .sd{width:13px;height:13px;border-radius:50%;}
+  .sport-pick button.sel{border-color:var(--c);background:color-mix(in srgb,var(--c) 12%,#fff);color:color-mix(in srgb,var(--c) 75%,#1a2230);}
+  .txt,select.txt{
+    width:100%;padding:13px 13px;border:1.5px solid var(--line-strong);border-radius:11px;
+    background:var(--surface);color:var(--ink);outline:none;transition:border-color .12s;
+  }
+  .txt:focus,select.txt:focus{border-color:#0F1722;}
+  .dist-wrap{display:flex;align-items:stretch;gap:0;}
+  .dist-wrap .txt{border-radius:11px 0 0 11px;border-right:none;}
+  .dist-unit{display:grid;place-items:center;padding:0 16px;border:1.5px solid var(--line-strong);border-left:none;border-radius:0 11px 11px 0;background:var(--surface-2);font-weight:700;color:var(--muted);font-size:14px;}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .btn{
+    width:100%;padding:14px;border-radius:12px;font-weight:700;font-size:15px;letter-spacing:.2px;
+    display:flex;align-items:center;justify-content:center;gap:7px;transition:.12s;
+  }
+  .btn:active{transform:scale(.985);}
+  .btn-primary{background:#0F1722;color:#fff;}
+  .btn-validate{background:var(--success);color:#fff;}
+  .btn-ghost{background:var(--surface-2);color:var(--ink);border:1.5px solid var(--line);}
+  .btn-danger{background:#fff;color:#D6452F;border:1.5px solid color-mix(in srgb,#D6452F 35%,#fff);}
+  .btn-row{display:flex;gap:10px;margin-top:6px;}
+  .btn-row .btn{flex:1;}
+  .stack{display:flex;flex-direction:column;gap:10px;margin-top:4px;}
+  .hint{font-size:12px;color:var(--faint);margin:-9px 0 14px;}
+  .settings-grp{margin-bottom:16px;}
+  .settings-grp .srow{display:flex;align-items:center;gap:11px;margin-top:9px;}
+  .settings-grp .srow .sd{width:11px;height:11px;border-radius:50%;flex:none;}
+  .settings-grp .srow label{flex:1;font-weight:600;font-size:14px;}
+  .settings-grp .srow .txt{width:96px;text-align:center;padding:10px;}
+  .settings-grp .srow .u{width:64px;font-size:12px;color:var(--muted);font-weight:600;}
+  .backup-grp{margin-top:20px;padding-top:18px;border-top:1px solid var(--line);}
+  .backup-label{display:block;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin-bottom:7px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="topbar-row">
+      <div class="brand">
+        <span class="dots"><i style="background:#1E88C7"></i><i style="background:#2FA86A"></i><i style="background:#E8643C"></i></span>
+        TriPlan
+      </div>
+      <button class="icon-btn" id="btnSettings" aria-label="Réglages">⚙︎</button>
+    </div>
+    <div class="weeknav" id="weeknav">
+      <button class="nav-arrow" id="prevWeek" aria-label="Semaine précédente">‹</button>
+      <div class="range" id="weekRange"><b>—</b><span>—</span></div>
+      <button class="nav-arrow" id="nextWeek" aria-label="Semaine suivante">›</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="view active" id="calView"></section>
+    <section class="view" id="statsView"></section>  <!-- Bilan (semaine affichée) -->
+    <section class="view" id="weeksView"></section>  <!-- Statistiques (toutes les semaines) -->
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab active" data-tab="cal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      Calendrier
+    </button>
+    <button class="tab" data-tab="bilan">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+      Bilan
+    </button>
+    <button class="tab" data-tab="stats">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+      Statistiques
+    </button>
+  </nav>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   TriPlan — planning triathlon, 100% local (localStorage)
+   ============================================================ */
+
+const KEY = "triplan.v1";
+const SPORTS = {
+  course:      { label:"Course",      color:"#2FA86A", unit:"km" },
+  velo:        { label:"Vélo",        color:"#E8643C", unit:"km" },
+  natation:    { label:"Natation",    color:"#1E88C7", unit:"m"  },
+  commentaire: { label:"Commentaire", color:"#7A8595", unit:null }, // bloque un créneau, sans distance/stats
+};
+// sports avec distance & statistiques (exclut "commentaire")
+const SPORT_KEYS = ["course","velo","natation"];
+const DEFAULT_SEED = [{"date":"2025-05-05","slot":"matin","sport":"velo","title":"Vélo 1h30","distance":34,"done":true},{"date":"2025-05-06","slot":"matin","sport":"course","title":"EF","distance":8.7,"done":true},{"date":"2025-05-07","slot":"matin","sport":"course","title":"EF","distance":5,"done":true},{"date":"2025-05-08","slot":"matin","sport":"course","title":"VMA 3x(200/400/300)","distance":10.8,"done":true},{"date":"2025-05-09","slot":"matin","sport":"velo","title":"Vélo 1h45","distance":42,"done":true},{"date":"2025-05-10","slot":"matin","sport":"course","title":"EF","distance":12.1,"done":true},{"date":"2025-05-11","slot":"matin","sport":"velo","title":"Vélo 1h37","distance":46,"done":true},{"date":"2025-05-12","slot":"matin","sport":"course","title":"EF","distance":9.8,"done":true},{"date":"2025-05-13","slot":"matin","sport":"velo","title":"Vélo 2h05","distance":58,"done":true},{"date":"2025-05-14","slot":"matin","sport":"course","title":"VMA 5x(600/200)","distance":11.3,"done":true},{"date":"2025-05-15","slot":"matin","sport":"velo","title":"Vélo 1h45","distance":45,"done":true},{"date":"2025-05-16","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-05-18","slot":"matin","sport":"velo","title":"Vélo 1h04","distance":28,"done":true},{"date":"2025-05-18","slot":"soir","sport":"course","title":"EF","distance":9,"done":true},{"date":"2025-05-19","slot":"matin","sport":"course","title":"Spé 4x1500","distance":11.5,"done":true},{"date":"2025-05-20","slot":"matin","sport":"velo","title":"Vélo 0h45","distance":20,"done":true},{"date":"2025-05-20","slot":"soir","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2025-05-21","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-05-22","slot":"matin","sport":"course","title":"VMA 10x400","distance":10,"done":true},{"date":"2025-05-22","slot":"soir","sport":"velo","title":"Vélo 1h15","distance":24,"done":true},{"date":"2025-05-23","slot":"matin","sport":"course","title":"EF","distance":8.5,"done":true},{"date":"2025-05-27","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-05-29","slot":"matin","sport":"course","title":"EF spé 2000","distance":10,"done":true},{"date":"2025-05-30","slot":"matin","sport":"natation","title":"Nat","distance":2200,"done":true},{"date":"2025-06-02","slot":"matin","sport":"course","title":"VMA 4x(300/500)","distance":10,"done":true},{"date":"2025-06-03","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-06-03","slot":"soir","sport":"velo","title":"Vélo","distance":34,"done":true},{"date":"2025-06-04","slot":"matin","sport":"velo","title":"Vélo","distance":65,"done":true},{"date":"2025-06-05","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2025-06-05","slot":"soir","sport":"course","title":"EF spé 3x1000","distance":10,"done":true},{"date":"2025-06-09","slot":"matin","sport":"velo","title":"Vélo","distance":36,"done":true},{"date":"2025-06-10","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-06-11","slot":"matin","sport":"course","title":"VMA bootcamp","distance":8.2,"done":true},{"date":"2025-06-12","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2025-06-13","slot":"matin","sport":"course","title":"Spé 2x2000/5x1\u0027","distance":11.8,"done":true},{"date":"2025-06-14","slot":"matin","sport":"velo","title":"Vélo","distance":76,"done":true},{"date":"2025-06-15","slot":"matin","sport":"velo","title":"Vélo","distance":48,"done":true},{"date":"2025-06-15","slot":"soir","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-06-16","slot":"matin","sport":"commentaire","title":"Renfo 0h30","distance":0,"done":true},{"date":"2025-06-17","slot":"matin","sport":"course","title":"VMA","distance":10,"done":true},{"date":"2025-06-18","slot":"matin","sport":"natation","title":"Nat","distance":1900,"done":true},{"date":"2025-06-18","slot":"soir","sport":"velo","title":"Vélo","distance":39,"done":true},{"date":"2025-06-19","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2025-06-20","slot":"matin","sport":"course","title":"Spé 2000-1000","distance":11,"done":true},{"date":"2025-06-22","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-06-23","slot":"matin","sport":"course","title":"VMA bootcamp","distance":7.3,"done":true},{"date":"2025-06-24","slot":"matin","sport":"velo","title":"Vélo","distance":52,"done":true},{"date":"2025-06-25","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-06-26","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2025-06-27","slot":"matin","sport":"course","title":"Spé 3000-2000-1000","distance":11.7,"done":true},{"date":"2025-06-29","slot":"matin","sport":"course","title":"EF","distance":11,"done":true},{"date":"2025-06-30","slot":"matin","sport":"course","title":"VMA 8x200","distance":10,"done":true},{"date":"2025-07-02","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2025-07-03","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-07-05","slot":"matin","sport":"course","title":"Activation","distance":3.4,"done":true},{"date":"2025-07-06","slot":"matin","sport":"course","title":"Course","distance":10,"done":true},{"date":"2025-07-07","slot":"matin","sport":"velo","title":"Vélo","distance":20,"done":true},{"date":"2025-07-09","slot":"matin","sport":"velo","title":"Vélo 2x15min","distance":42,"done":true},{"date":"2025-07-11","slot":"matin","sport":"course","title":"EF","distance":7,"done":true},{"date":"2025-07-12","slot":"matin","sport":"velo","title":"Vélo","distance":83,"done":true},{"date":"2025-07-14","slot":"matin","sport":"velo","title":"Vélo","distance":52,"done":true},{"date":"2025-07-15","slot":"matin","sport":"course","title":"EF","distance":9,"done":true},{"date":"2025-07-16","slot":"matin","sport":"course","title":"Mixte","distance":12.5,"done":true},{"date":"2025-07-17","slot":"matin","sport":"velo","title":"Vélo L","distance":30,"done":true},{"date":"2025-07-18","slot":"matin","sport":"course","title":"EF","distance":8.7,"done":true},{"date":"2025-07-20","slot":"matin","sport":"velo","title":"Vélo","distance":27,"done":true},{"date":"2025-07-21","slot":"matin","sport":"course","title":"Spé 4x7\u0027","distance":14,"done":true},{"date":"2025-07-22","slot":"matin","sport":"velo","title":"Vélo","distance":52,"done":true},{"date":"2025-07-23","slot":"matin","sport":"course","title":"EF","distance":11,"done":true},{"date":"2025-07-24","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2025-07-28","slot":"matin","sport":"course","title":"Trail","distance":7.3,"done":true},{"date":"2025-07-28","slot":"midi","sport":"natation","title":"Nat","distance":1400,"done":true},{"date":"2025-07-28","slot":"midi","sport":"velo","title":"Vélo L","distance":57,"done":true},{"date":"2025-07-28","slot":"soir","sport":"velo","title":"Vélo M","distance":40,"done":true},{"date":"2025-07-29","slot":"matin","sport":"velo","title":"Vélo","distance":42,"done":true},{"date":"2025-07-29","slot":"midi","sport":"course","title":"Trail","distance":7.4,"done":true},{"date":"2025-07-29","slot":"midi","sport":"velo","title":"Vélo Paris-LR","distance":170,"done":true},{"date":"2025-07-29","slot":"midi","sport":"course","title":"SL","distance":16,"done":true},{"date":"2025-07-29","slot":"midi","sport":"commentaire","title":"Surf 2h","distance":0,"done":true},{"date":"2025-07-29","slot":"soir","sport":"course","title":"SL","distance":15.5,"done":true},{"date":"2025-07-30","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-07-30","slot":"midi","sport":"commentaire","title":"Renfo 45min","distance":0,"done":true},{"date":"2025-07-30","slot":"midi","sport":"velo","title":"Vélo Paris-LR","distance":152,"done":true},{"date":"2025-07-30","slot":"midi","sport":"commentaire","title":"Surf 2h","distance":0,"done":true},{"date":"2025-07-30","slot":"soir","sport":"velo","title":"Vélo récup","distance":40,"done":true},{"date":"2025-07-31","slot":"matin","sport":"velo","title":"Vélo","distance":45,"done":true},{"date":"2025-07-31","slot":"midi","sport":"velo","title":"Vélo Paris-LR","distance":170,"done":true},{"date":"2025-07-31","slot":"midi","sport":"velo","title":"Vélo récup","distance":45,"done":true},{"date":"2025-07-31","slot":"soir","sport":"course","title":"EF","distance":9.5,"done":true},{"date":"2025-08-01","slot":"matin","sport":"course","title":"EF","distance":11,"done":true},{"date":"2025-08-01","slot":"midi","sport":"natation","title":"Nat","distance":500,"done":true},{"date":"2025-08-01","slot":"soir","sport":"course","title":"EF","distance":9,"done":true},{"date":"2025-08-02","slot":"matin","sport":"velo","title":"Vélo","distance":100,"done":true},{"date":"2025-08-02","slot":"midi","sport":"course","title":"Trail","distance":15.3,"done":true},{"date":"2025-08-02","slot":"midi","sport":"natation","title":"Nat","distance":1700,"done":true},{"date":"2025-08-02","slot":"midi","sport":"commentaire","title":"Surf 4h","distance":0,"done":true},{"date":"2025-08-02","slot":"soir","sport":"velo","title":"Vélo L","distance":73,"done":true},{"date":"2025-08-03","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2025-08-03","slot":"midi","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-08-03","slot":"midi","sport":"natation","title":"Nat","distance":500,"done":true},{"date":"2025-08-03","slot":"midi","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-08-03","slot":"soir","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-09-01","slot":"matin","sport":"velo","title":"Vélo EF","distance":31,"done":true},{"date":"2025-09-02","slot":"matin","sport":"course","title":"EF","distance":12,"done":true},{"date":"2025-09-03","slot":"matin","sport":"natation","title":"Nat","distance":1700,"done":true},{"date":"2025-09-04","slot":"matin","sport":"velo","title":"Vélo test M","distance":49,"done":true},{"date":"2025-09-04","slot":"soir","sport":"course","title":"CAP test M","distance":12.7,"done":true},{"date":"2025-09-05","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2025-09-06","slot":"matin","sport":"course","title":"EF","distance":7.9,"done":true},{"date":"2025-09-08","slot":"matin","sport":"course","title":"Episod bootcamp","distance":3.7,"done":true},{"date":"2025-09-10","slot":"matin","sport":"natation","title":"Nat","distance":1500,"done":true},{"date":"2025-09-11","slot":"matin","sport":"velo","title":"Vélo","distance":33,"done":true},{"date":"2025-09-13","slot":"matin","sport":"course","title":"Triathlon St Jean de Luz","distance":46,"done":true},{"date":"2025-09-13","slot":"soir","sport":"course","title":"Triathlon St Jean de Luz","distance":9.3,"done":true},{"date":"2025-09-14","slot":"matin","sport":"velo","title":"Vélo","distance":19,"done":true},{"date":"2025-09-14","slot":"soir","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2025-09-16","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2025-09-17","slot":"matin","sport":"velo","title":"Vélo","distance":22,"done":true},{"date":"2025-09-18","slot":"matin","sport":"course","title":"EF","distance":12.5,"done":true},{"date":"2025-09-20","slot":"matin","sport":"velo","title":"Vélo L","distance":61,"done":true},{"date":"2025-09-20","slot":"soir","sport":"course","title":"CAP L","distance":15,"done":true},{"date":"2025-09-21","slot":"matin","sport":"natation","title":"Nat","distance":1700,"done":true},{"date":"2025-09-21","slot":"soir","sport":"velo","title":"Vélo","distance":34,"done":true},{"date":"2025-09-23","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2025-09-24","slot":"matin","sport":"velo","title":"Vélo","distance":30,"done":true},{"date":"2025-09-25","slot":"matin","sport":"commentaire","title":"Départ LR","distance":0,"done":true},{"date":"2025-09-26","slot":"matin","sport":"course","title":"Activation","distance":3.7,"done":true},{"date":"2025-09-27","slot":"matin","sport":"course","title":"Triathlon Sud Vendée","distance":85,"done":true},{"date":"2025-09-27","slot":"soir","sport":"course","title":"Triathlon Sud Vendée","distance":21.1,"done":true},{"date":"2025-10-01","slot":"matin","sport":"course","title":"EF","distance":9,"done":true},{"date":"2025-10-02","slot":"matin","sport":"velo","title":"Vélo","distance":51,"done":true},{"date":"2025-10-08","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-10-10","slot":"matin","sport":"course","title":"EA","distance":16,"done":true},{"date":"2025-10-12","slot":"matin","sport":"course","title":"EA","distance":7,"done":true},{"date":"2025-10-14","slot":"matin","sport":"course","title":"EF","distance":9,"done":true},{"date":"2025-10-15","slot":"matin","sport":"course","title":"Spé","distance":20,"done":true},{"date":"2025-10-19","slot":"matin","sport":"course","title":"EF","distance":15,"done":true},{"date":"2025-10-21","slot":"matin","sport":"course","title":"EF","distance":9,"done":true},{"date":"2025-10-22","slot":"matin","sport":"course","title":"Spé","distance":24,"done":true},{"date":"2025-10-24","slot":"matin","sport":"course","title":"EF","distance":7,"done":true},{"date":"2025-10-25","slot":"matin","sport":"velo","title":"Vélo","distance":75,"done":true},{"date":"2025-10-26","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-10-28","slot":"matin","sport":"course","title":"Frac","distance":11,"done":true},{"date":"2025-10-31","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2025-11-01","slot":"matin","sport":"velo","title":"Vélo","distance":81,"done":true},{"date":"2025-11-02","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2025-11-03","slot":"matin","sport":"course","title":"EF","distance":9.3,"done":true},{"date":"2025-11-05","slot":"matin","sport":"course","title":"Spé","distance":27,"done":true},{"date":"2025-11-06","slot":"matin","sport":"velo","title":"Vélo","distance":15,"done":true},{"date":"2025-11-08","slot":"matin","sport":"course","title":"EF","distance":8.4,"done":true},{"date":"2025-11-08","slot":"soir","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2025-11-09","slot":"matin","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2025-11-09","slot":"soir","sport":"course","title":"EF","distance":10.3,"done":true},{"date":"2025-11-11","slot":"matin","sport":"course","title":"SL","distance":31.6,"done":true},{"date":"2025-11-13","slot":"matin","sport":"course","title":"EF","distance":6.4,"done":true},{"date":"2025-11-14","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2025-11-16","slot":"matin","sport":"course","title":"EF","distance":12,"done":true},{"date":"2025-11-18","slot":"matin","sport":"course","title":"SL","distance":18.4,"done":true},{"date":"2025-11-21","slot":"matin","sport":"course","title":"EF","distance":8.6,"done":true},{"date":"2025-11-22","slot":"matin","sport":"course","title":"Marathon Beaujolais","distance":14,"done":true},{"date":"2025-11-26","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2025-11-29","slot":"matin","sport":"course","title":"Activation","distance":4,"done":true},{"date":"2025-11-30","slot":"matin","sport":"course","title":"Marathon LR","distance":42,"done":true},{"date":"2025-12-07","slot":"matin","sport":"velo","title":"Vélo","distance":15,"done":true},{"date":"2025-12-09","slot":"matin","sport":"velo","title":"Vélo","distance":34,"done":true},{"date":"2025-12-12","slot":"matin","sport":"velo","title":"Vélo","distance":21,"done":true},{"date":"2025-12-15","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2025-12-17","slot":"matin","sport":"velo","title":"Vélo SS","distance":22,"done":true},{"date":"2025-12-19","slot":"matin","sport":"velo","title":"Vélo","distance":15,"done":true},{"date":"2025-12-21","slot":"matin","sport":"velo","title":"Vélo VO2max","distance":34,"done":true},{"date":"2025-12-24","slot":"matin","sport":"course","title":"Piste","distance":9,"done":true},{"date":"2025-12-28","slot":"matin","sport":"course","title":"EF","distance":7,"done":true},{"date":"2025-12-30","slot":"matin","sport":"course","title":"EF","distance":4,"done":true},{"date":"2026-01-04","slot":"matin","sport":"velo","title":"Vélo HIM","distance":61,"done":true},{"date":"2026-01-05","slot":"matin","sport":"velo","title":"Vélo","distance":15,"done":true},{"date":"2026-01-06","slot":"matin","sport":"course","title":"EF","distance":3,"done":true},{"date":"2026-01-08","slot":"matin","sport":"velo","title":"Vélo FTP","distance":25,"done":true},{"date":"2026-01-10","slot":"matin","sport":"course","title":"EF","distance":6,"done":true},{"date":"2026-01-11","slot":"matin","sport":"velo","title":"Vélo","distance":29,"done":true},{"date":"2026-01-13","slot":"matin","sport":"velo","title":"Vélo","distance":25,"done":true},{"date":"2026-01-15","slot":"matin","sport":"velo","title":"Vélo VO2max","distance":16,"done":true},{"date":"2026-01-17","slot":"matin","sport":"course","title":"EF","distance":5,"done":true},{"date":"2026-01-18","slot":"matin","sport":"velo","title":"Vélo HIM","distance":46,"done":true},{"date":"2026-01-19","slot":"matin","sport":"velo","title":"Vélo","distance":30,"done":true},{"date":"2026-01-21","slot":"matin","sport":"velo","title":"Vélo FTP","distance":23,"done":true},{"date":"2026-01-22","slot":"matin","sport":"course","title":"EF","distance":6,"done":true},{"date":"2026-01-23","slot":"matin","sport":"velo","title":"Vélo","distance":32,"done":true},{"date":"2026-01-25","slot":"matin","sport":"velo","title":"Vélo HIM","distance":32,"done":true},{"date":"2026-01-26","slot":"matin","sport":"velo","title":"Vélo","distance":77,"done":true},{"date":"2026-01-28","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2026-01-28","slot":"soir","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2026-01-29","slot":"matin","sport":"velo","title":"Vélo","distance":52,"done":true},{"date":"2026-01-30","slot":"matin","sport":"velo","title":"Vélo","distance":42,"done":true},{"date":"2026-01-30","slot":"soir","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2026-01-31","slot":"matin","sport":"course","title":"Trail","distance":8,"done":true},{"date":"2026-02-01","slot":"matin","sport":"velo","title":"Vélo","distance":36,"done":true},{"date":"2026-02-02","slot":"matin","sport":"velo","title":"Vélo","distance":65,"done":true},{"date":"2026-02-03","slot":"matin","sport":"velo","title":"Vélo SS","distance":39,"done":true},{"date":"2026-02-03","slot":"soir","sport":"course","title":"EF","distance":9,"done":true},{"date":"2026-02-04","slot":"matin","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2026-02-05","slot":"matin","sport":"velo","title":"Vélo","distance":45,"done":true},{"date":"2026-02-05","slot":"soir","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2026-02-06","slot":"matin","sport":"velo","title":"Vélo VO2max","distance":41,"done":true},{"date":"2026-02-06","slot":"soir","sport":"course","title":"EF","distance":7,"done":true},{"date":"2026-02-07","slot":"matin","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2026-02-08","slot":"matin","sport":"velo","title":"Vélo","distance":34,"done":true},{"date":"2026-02-08","slot":"soir","sport":"course","title":"AS + surf 1h30","distance":8,"done":true},{"date":"2026-02-10","slot":"matin","sport":"velo","title":"Vélo","distance":50,"done":true},{"date":"2026-02-11","slot":"matin","sport":"course","title":"EF","distance":9.6,"done":true},{"date":"2026-02-11","slot":"soir","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2026-02-12","slot":"matin","sport":"velo","title":"Vélo SS","distance":40,"done":true},{"date":"2026-02-12","slot":"soir","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2026-02-13","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2026-02-15","slot":"matin","sport":"velo","title":"Vélo","distance":35,"done":true},{"date":"2026-02-16","slot":"matin","sport":"velo","title":"Vélo","distance":71,"done":true},{"date":"2026-02-16","slot":"soir","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2026-02-17","slot":"matin","sport":"course","title":"EF","distance":9.6,"done":true},{"date":"2026-02-17","slot":"soir","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2026-02-18","slot":"matin","sport":"velo","title":"Vélo","distance":50,"done":true},{"date":"2026-02-19","slot":"matin","sport":"velo","title":"Vélo","distance":36,"done":true},{"date":"2026-02-19","slot":"soir","sport":"course","title":"EF","distance":8,"done":true},{"date":"2026-02-20","slot":"matin","sport":"velo","title":"Vélo FTP","distance":42,"done":true},{"date":"2026-02-21","slot":"matin","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2026-02-22","slot":"matin","sport":"velo","title":"Vélo","distance":45,"done":true},{"date":"2026-02-22","slot":"soir","sport":"commentaire","title":"Surf","distance":0,"done":true},{"date":"2026-02-23","slot":"matin","sport":"velo","title":"Vélo","distance":100,"done":true},{"date":"2026-02-24","slot":"matin","sport":"commentaire","title":"Retour Lanzarote","distance":0,"done":true},{"date":"2026-02-25","slot":"matin","sport":"velo","title":"Vélo","distance":42,"done":true},{"date":"2026-02-26","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2026-02-27","slot":"matin","sport":"velo","title":"Vélo SS","distance":55,"done":true},{"date":"2026-02-28","slot":"matin","sport":"course","title":"EF","distance":8.7,"done":true},{"date":"2026-03-01","slot":"matin","sport":"velo","title":"Vélo","distance":49,"done":true},{"date":"2026-03-03","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2026-03-03","slot":"soir","sport":"velo","title":"Vélo VO2max","distance":45,"done":true},{"date":"2026-03-04","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2026-03-05","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2026-03-06","slot":"matin","sport":"velo","title":"Vélo","distance":69,"done":true},{"date":"2026-03-07","slot":"matin","sport":"velo","title":"Vélo FTP","distance":62,"done":true},{"date":"2026-03-08","slot":"matin","sport":"course","title":"Frac","distance":8,"done":true},{"date":"2026-03-09","slot":"matin","sport":"commentaire","title":"RDV Bike fitting","distance":0,"done":true},{"date":"2026-03-10","slot":"matin","sport":"velo","title":"Vélo","distance":71,"done":true},{"date":"2026-03-11","slot":"matin","sport":"velo","title":"Vélo","distance":43,"done":true},{"date":"2026-03-11","slot":"soir","sport":"course","title":"EF","distance":8,"done":true},{"date":"2026-03-12","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2026-03-12","slot":"soir","sport":"commentaire","title":"Tennis","distance":0,"done":true},{"date":"2026-03-13","slot":"matin","sport":"velo","title":"Vélo VO2max","distance":36,"done":true},{"date":"2026-03-13","slot":"soir","sport":"course","title":"EF","distance":10,"done":true},{"date":"2026-03-14","slot":"matin","sport":"velo","title":"Vélo","distance":55,"done":true},{"date":"2026-03-15","slot":"matin","sport":"course","title":"Frac","distance":11,"done":true},{"date":"2026-03-16","slot":"matin","sport":"commentaire","title":"Début Azulis","distance":0,"done":true},{"date":"2026-03-17","slot":"matin","sport":"velo","title":"Vélo","distance":40,"done":true},{"date":"2026-03-18","slot":"matin","sport":"course","title":"EF","distance":11,"done":true},{"date":"2026-03-19","slot":"matin","sport":"velo","title":"Vélo SS","distance":20,"done":true},{"date":"2026-03-20","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2026-03-21","slot":"matin","sport":"velo","title":"Vélo","distance":83,"done":true},{"date":"2026-03-22","slot":"matin","sport":"course","title":"Frac","distance":12,"done":true},{"date":"2026-03-24","slot":"matin","sport":"velo","title":"Vélo","distance":32,"done":true},{"date":"2026-03-25","slot":"matin","sport":"course","title":"EF","distance":11.5,"done":true},{"date":"2026-03-26","slot":"matin","sport":"velo","title":"Vélo Seuil","distance":33,"done":true},{"date":"2026-03-27","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2026-03-28","slot":"matin","sport":"course","title":"EF","distance":11.5,"done":true},{"date":"2026-03-29","slot":"matin","sport":"velo","title":"Vélo","distance":92,"done":true},{"date":"2026-03-31","slot":"matin","sport":"velo","title":"Vélo","distance":33,"done":true},{"date":"2026-04-01","slot":"matin","sport":"course","title":"Frac 6x800","distance":11,"done":true},{"date":"2026-04-03","slot":"matin","sport":"velo","title":"Vélo","distance":32,"done":true},{"date":"2026-04-04","slot":"matin","sport":"commentaire","title":"EVG Ulysse","distance":0,"done":true},{"date":"2026-04-05","slot":"matin","sport":"commentaire","title":"EVG Ulysse","distance":0,"done":true},{"date":"2026-04-06","slot":"matin","sport":"commentaire","title":"EVG Ulysse","distance":0,"done":true},{"date":"2026-04-07","slot":"matin","sport":"course","title":"EF","distance":11,"done":true},{"date":"2026-04-08","slot":"matin","sport":"velo","title":"Vélo","distance":45,"done":true},{"date":"2026-04-09","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2026-04-10","slot":"matin","sport":"velo","title":"Activation vélo","distance":31,"done":true},{"date":"2026-04-11","slot":"matin","sport":"velo","title":"Vélo FTP (Summit)","distance":24,"done":true},{"date":"2026-04-12","slot":"matin","sport":"course","title":"Frac (Marathon)","distance":15,"done":true},{"date":"2026-04-14","slot":"matin","sport":"course","title":"EF","distance":6,"done":true},{"date":"2026-04-15","slot":"matin","sport":"velo","title":"Vélo","distance":30,"done":true},{"date":"2026-04-16","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2026-04-18","slot":"matin","sport":"commentaire","title":"Anniv","distance":0,"done":true},{"date":"2026-04-19","slot":"matin","sport":"commentaire","title":"Anniv","distance":0,"done":true},{"date":"2026-04-22","slot":"matin","sport":"course","title":"EF","distance":11,"done":true},{"date":"2026-04-23","slot":"matin","sport":"velo","title":"Vélo","distance":53,"done":true},{"date":"2026-04-24","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2026-04-24","slot":"soir","sport":"course","title":"EF","distance":10,"done":true},{"date":"2026-04-25","slot":"matin","sport":"velo","title":"Vélo HIM","distance":61,"done":true},{"date":"2026-04-26","slot":"matin","sport":"course","title":"Frac","distance":12,"done":true},{"date":"2026-04-28","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2026-04-28","slot":"soir","sport":"course","title":"EF","distance":11,"done":true},{"date":"2026-04-29","slot":"matin","sport":"velo","title":"Vélo FTP","distance":35,"done":true},{"date":"2026-04-30","slot":"matin","sport":"course","title":"EF","distance":14,"done":true},{"date":"2026-05-01","slot":"matin","sport":"velo","title":"Vélo","distance":54,"done":true},{"date":"2026-05-03","slot":"matin","sport":"velo","title":"Vélo","distance":57,"done":true},{"date":"2026-05-03","slot":"soir","sport":"course","title":"EF","distance":11,"done":true},{"date":"2026-05-04","slot":"matin","sport":"velo","title":"Vélo","distance":32,"done":true},{"date":"2026-05-04","slot":"soir","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2026-05-05","slot":"matin","sport":"course","title":"EF","distance":6,"done":true},{"date":"2026-05-06","slot":"matin","sport":"course","title":"Frac","distance":13,"done":true},{"date":"2026-05-08","slot":"matin","sport":"velo","title":"Vélo","distance":92,"done":true},{"date":"2026-05-08","slot":"soir","sport":"course","title":"EF","distance":8,"done":true},{"date":"2026-05-09","slot":"matin","sport":"velo","title":"Vélo","distance":30,"done":true},{"date":"2026-05-09","slot":"soir","sport":"commentaire","title":"Chateau Tavers","distance":0,"done":true},{"date":"2026-05-11","slot":"matin","sport":"course","title":"EF","distance":11,"done":true},{"date":"2026-05-12","slot":"matin","sport":"velo","title":"Vélo","distance":27,"done":true},{"date":"2026-05-14","slot":"matin","sport":"course","title":"Frac","distance":8,"done":true},{"date":"2026-05-15","slot":"matin","sport":"natation","title":"Nat (dimanche)","distance":1500,"done":true},{"date":"2026-05-16","slot":"matin","sport":"velo","title":"Vélo","distance":48,"done":true},{"date":"2026-05-16","slot":"soir","sport":"course","title":"EF","distance":9,"done":true},{"date":"2026-05-17","slot":"matin","sport":"velo","title":"Vélo","distance":67,"done":true},{"date":"2026-05-17","slot":"soir","sport":"course","title":"EF","distance":4,"done":true},{"date":"2026-05-18","slot":"matin","sport":"commentaire","title":"Train","distance":0,"done":true},{"date":"2026-05-20","slot":"matin","sport":"course","title":"EF","distance":10,"done":true},{"date":"2026-05-22","slot":"matin","sport":"velo","title":"Vélo","distance":39,"done":true},{"date":"2026-05-23","slot":"matin","sport":"course","title":"Activation","distance":3,"done":true},{"date":"2026-05-24","slot":"matin","sport":"course","title":"10k Vincennes","distance":10,"done":true},{"date":"2026-05-26","slot":"matin","sport":"velo","title":"Vélo","distance":30,"done":true},{"date":"2026-05-27","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2026-05-28","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2026-05-29","slot":"matin","sport":"velo","title":"Vélo","distance":42,"done":true},{"date":"2026-05-30","slot":"matin","sport":"commentaire","title":"Anniv Paul","distance":0,"done":true},{"date":"2026-05-31","slot":"matin","sport":"commentaire","title":"Anniv Paul","distance":0,"done":true},{"date":"2026-06-01","slot":"matin","sport":"course","title":"EF","distance":8,"done":true},{"date":"2026-06-01","slot":"soir","sport":"commentaire","title":"Roland","distance":0,"done":true},{"date":"2026-06-02","slot":"matin","sport":"velo","title":"Vélo VO2max","distance":43,"done":true},{"date":"2026-06-03","slot":"matin","sport":"course","title":"Longue","distance":16,"done":true},{"date":"2026-06-04","slot":"matin","sport":"velo","title":"Vélo","distance":33,"done":true},{"date":"2026-06-05","slot":"matin","sport":"velo","title":"Vélo","distance":40,"done":true},{"date":"2026-06-05","slot":"soir","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2026-06-06","slot":"matin","sport":"course","title":"Trail","distance":12,"done":true},{"date":"2026-06-06","slot":"soir","sport":"commentaire","title":"Mariage clem","distance":0,"done":true},{"date":"2026-06-08","slot":"matin","sport":"velo","title":"Vélo","distance":35,"done":true},{"date":"2026-06-09","slot":"matin","sport":"course","title":"Frac France Invest","distance":8,"done":true},{"date":"2026-06-10","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2026-06-11","slot":"matin","sport":"velo","title":"Vélo","distance":31,"done":true},{"date":"2026-06-13","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2026-06-13","slot":"soir","sport":"velo","title":"Vélo 2x40\u0027","distance":74,"done":true},{"date":"2026-06-14","slot":"matin","sport":"course","title":"CAP (samedi)","distance":4,"done":true},{"date":"2026-06-14","slot":"soir","sport":"course","title":"Longue 3x20\u0027","distance":20,"done":true},{"date":"2026-06-15","slot":"matin","sport":"commentaire","title":"CS Nerco","distance":0,"done":true},{"date":"2026-06-16","slot":"matin","sport":"velo","title":"Vélo","distance":21,"done":true},{"date":"2026-06-16","slot":"soir","sport":"commentaire","title":"CdM","distance":0,"done":true},{"date":"2026-06-17","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2026-06-17","slot":"soir","sport":"course","title":"EF","distance":8,"done":true},{"date":"2026-06-18","slot":"matin","sport":"velo","title":"Vélo","distance":45,"done":true},{"date":"2026-06-20","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":true},{"date":"2026-06-20","slot":"soir","sport":"velo","title":"Vélo 2x40\u0027","distance":74,"done":true},{"date":"2026-06-21","slot":"matin","sport":"course","title":"CAP (samedi)","distance":4,"done":true},{"date":"2026-06-21","slot":"soir","sport":"course","title":"Longue 1h","distance":20,"done":true},{"date":"2026-06-22","slot":"matin","sport":"commentaire","title":"CdM","distance":0,"done":true},{"date":"2026-06-24","slot":"matin","sport":"velo","title":"Vélo","distance":31,"done":true},{"date":"2026-06-25","slot":"matin","sport":"natation","title":"Nat","distance":1600,"done":true},{"date":"2026-06-25","slot":"soir","sport":"commentaire","title":"Train","distance":0,"done":true},{"date":"2026-06-26","slot":"matin","sport":"course","title":"EF","distance":11,"done":true},{"date":"2026-06-26","slot":"soir","sport":"commentaire","title":"CdM","distance":0,"done":true},{"date":"2026-06-27","slot":"matin","sport":"velo","title":"Vélo","distance":52,"done":true},{"date":"2026-06-28","slot":"matin","sport":"natation","title":"Nat","distance":1500,"done":true},{"date":"2026-06-30","slot":"matin","sport":"velo","title":"Vélo","distance":20,"done":false},{"date":"2026-07-01","slot":"matin","sport":"course","title":"EF","distance":6,"done":false},{"date":"2026-07-02","slot":"matin","sport":"natation","title":"Nat","distance":2000,"done":false},{"date":"2026-07-04","slot":"matin","sport":"course","title":"Activ","distance":40,"done":false},{"date":"2026-07-05","slot":"matin","sport":"velo","title":"Gorillaman vélo","distance":90,"done":false},{"date":"2026-07-05","slot":"soir","sport":"course","title":"Gorillaman CAP","distance":20,"done":false}];
+const SLOTS = [
+  { key:"matin", label:"Matin" },
+  { key:"midi",  label:"Midi"  },
+  { key:"soir",  label:"Soir"  },
+];
+const DOW = ["lundi","mardi","mercredi","jeudi","vendredi","samedi","dimanche"];
+const MONTHS = ["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+
+/* ---------- State ---------- */
+function defaultState(){
+  return {
+    version:1,
+    settings:{ paceCourse:300, vitesseVelo:30, paceNat:120 }, // sec/km, km/h, sec/100m
+    activities:{}
+  };
+}
+// état initial pré-rempli depuis l'Excel (utilisé si aucune donnée locale)
+function seededState(){
+  const s = defaultState();
+  (typeof DEFAULT_SEED!=="undefined"?DEFAULT_SEED:[]).forEach((a,i)=>{
+    s.activities["seed"+i] = { id:"seed"+i, date:a.date, slot:a.slot, sport:a.sport, title:a.title||null, distance:a.distance, done:!!a.done, created:i };
+  });
+  return s;
+}
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(!raw) return seededState();
+    const s = JSON.parse(raw);
+    if(!s.settings) s.settings = defaultState().settings;
+    if(!s.activities) s.activities = {};
+    return s;
+  }catch(e){ return defaultState(); }
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+let state = load();
+let seq = 0;
+function newId(){ return "a" + Date.now().toString(36) + (seq++).toString(36); }
+
+/* ---------- Date helpers (local, semaine lundi) ---------- */
+function startOfWeek(d){
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const off = (x.getDay() + 6) % 7; // lundi=0
+  x.setDate(x.getDate() - off);
+  return x;
+}
+function isoDate(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), dd=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${dd}`;
+}
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+let weekStart = startOfWeek(new Date());
+
+/* ---------- Formatters ---------- */
+function fmtDist(act){
+  const u = SPORTS[act.sport].unit;
+  if(u==="m") return Math.round(act.distance) + " m";
+  const v = act.distance;
+  return (Number.isInteger(v) ? v : v.toFixed(1).replace(/\.0$/,"")) + " km";
+}
+function fmtMMSS(sec){ const m=Math.floor(sec/60), s=Math.round(sec%60); return `${m}:${String(s).padStart(2,"0")}`; }
+function parseMMSS(str){
+  const p = String(str).trim().split(":");
+  if(p.length===2){ const m=parseInt(p[0],10)||0, s=parseInt(p[1],10)||0; return m*60+s; }
+  const f = parseFloat(str); return isFinite(f) ? Math.round(f*60) : 0;
+}
+function fmtDur(sec){
+  if(!sec || sec<=0) return "0:00";
+  const total = Math.round(sec/60);
+  const h = Math.floor(total/60), m = total%60;
+  return `${h}:${String(m).padStart(2,"0")}`;
+}
+/* durée estimée (secondes) d'une activité */
+function estDuration(act){
+  const s = state.settings;
+  if(act.sport==="course")   return act.distance * s.paceCourse;
+  if(act.sport==="velo")     return s.vitesseVelo>0 ? (act.distance / s.vitesseVelo) * 3600 : 0;
+  if(act.sport==="natation") return (act.distance/100) * s.paceNat;
+  return 0;
+}
+
+/* ---------- Activity queries ---------- */
+function actsFor(dateStr, slot){
+  return Object.values(state.activities)
+    .filter(a => a.date===dateStr && a.slot===slot)
+    .sort((a,b)=> (a.created||0)-(b.created||0));
+}
+function weekActs(){
+  const start = isoDate(weekStart), end = isoDate(addDays(weekStart,6));
+  return Object.values(state.activities).filter(a => a.date>=start && a.date<=end);
+}
+
+/* ============================================================
+   RENDER — Calendrier
+   ============================================================ */
+const calView = document.getElementById("calView");
+const todayStr = isoDate(new Date());
+
+function renderWeekRange(){
+  const end = addDays(weekStart,6);
+  const sameMonth = weekStart.getMonth()===end.getMonth();
+  const left = `${weekStart.getDate()} ${sameMonth?"":MONTHS[weekStart.getMonth()]}`;
+  const right = `${end.getDate()} ${MONTHS[end.getMonth()]} ${end.getFullYear()}`;
+  document.querySelector("#weekRange b").textContent = `${left} – ${right}`;
+  // numéro de semaine ISO
+  const tmp = new Date(weekStart); tmp.setDate(tmp.getDate()+3);
+  const week1 = new Date(tmp.getFullYear(),0,4);
+  const wn = 1 + Math.round(((tmp - week1)/86400000 - 3 + ((week1.getDay()+6)%7))/7);
+  document.querySelector("#weekRange span").textContent = `Semaine ${wn}`;
+}
+
+function renderCalendar(){
+  renderWeekRange();
+  let html = "";
+  for(let i=0;i<7;i++){
+    const d = addDays(weekStart,i);
+    const ds = isoDate(d);
+    const isToday = ds===todayStr;
+    html += `<div class="day${isToday?" is-today":""}">
+      <div class="day-head">
+        <span class="dow">${DOW[i]}</span>
+        <span class="dnum">${d.getDate()} ${MONTHS[d.getMonth()]}</span>
+        ${isToday?`<span class="badge-today">Auj.</span>`:""}
+      </div>
+      <div class="slots">`;
+    for(const slot of SLOTS){
+      const list = actsFor(ds, slot.key);
+      html += `<div class="slot" data-date="${ds}" data-slot="${slot.key}">
+        <div class="slot-label">${slot.label}</div>
+        <div class="slot-body">`;
+      for(const a of list){
+        const c = SPORTS[a.sport].color;
+        const title = a.title || SPORTS[a.sport].label;
+        const isComment = a.sport==="commentaire";
+        const done = a.done && !isComment;
+        html += `<div class="act${done?" done":""}${isComment?" comment":""}" data-id="${a.id}" style="--c:${c}">
+          <div class="t">${done?'<span class="chk">✓</span>':""}<span>${escapeHtml(title)}</span></div>
+          ${isComment?"":`<div class="d">${fmtDist(a)}</div>`}
+        </div>`;
+      }
+      html += `</div><button class="add-slot" data-add data-date="${ds}" data-slot="${slot.key}" aria-label="Ajouter">+</button>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+  calView.innerHTML = html;
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+/* ============================================================
+   RENDER — Statistiques (semaine affichée)
+   ============================================================ */
+const statsView = document.getElementById("statsView");
+function renderStats(){
+  const acts = weekActs().filter(a => a.sport!=="commentaire");
+  const end = addDays(weekStart,6);
+  const agg = {}; for(const k of SPORT_KEYS) agg[k] = { distP:0,distD:0,durP:0,durD:0 };
+  let totDurP=0, totDurD=0;
+  for(const a of acts){
+    const g = agg[a.sport]; if(!g) continue; const dur = estDuration(a);
+    g.distP += a.distance; g.durP += dur; totDurP += dur;
+    if(a.done){ g.distD += a.distance; g.durD += dur; totDurD += dur; }
+  }
+  let html = `<div class="stats-head">
+    <h2>Bilan de la semaine</h2>
+    <p>${weekStart.getDate()} ${MONTHS[weekStart.getMonth()]} – ${end.getDate()} ${MONTHS[end.getMonth()]} ${end.getFullYear()}</p>
+  </div>`;
+
+  if(acts.length===0){
+    html += `<div class="empty-note">Aucune séance cette semaine.<br>Ajoute des activités dans le calendrier.</div>`;
+    statsView.innerHTML = html; return;
+  }
+
+  // total temps EN HAUT
+  html += `<div class="stat-card total-card">
+    <div class="stat-top"><h3>Total — temps d'entraînement</h3></div>
+    <div class="stat-grid">
+      <div class="metric"><div class="lbl">Durée prévue</div><div class="val">${fmtDur(totDurP)} <small>h</small></div></div>
+      <div class="metric"><div class="lbl">Durée réalisée</div><div class="val">${fmtDur(totDurD)} <small>h</small></div></div>
+    </div>
+  </div>`;
+
+  for(const k of SPORT_KEYS){
+    const g = agg[k]; const sp = SPORTS[k]; const u = sp.unit;
+    const distLabel = u==="m" ? "m" : "km";
+    const distP = u==="m" ? Math.round(g.distP) : +g.distP.toFixed(1);
+    const distD = u==="m" ? Math.round(g.distD) : +g.distD.toFixed(1);
+    const pct = g.distP>0 ? Math.round(g.distD/g.distP*100) : 0;
+    html += `<div class="stat-card" style="--c:${sp.color}">
+      <div class="stat-top"><span class="stat-dot"></span><h3>${sp.label}</h3></div>
+      <div class="stat-grid">
+        <div class="metric"><div class="lbl">Distance prévue</div><div class="val">${distP} <small>${distLabel}</small></div></div>
+        <div class="metric done"><div class="lbl">Réalisée</div><div class="val">${distD} <small>${distLabel}</small></div></div>
+        <div class="metric"><div class="lbl">Durée estimée</div><div class="val">${fmtDur(g.durP)} <small>h</small></div></div>
+        <div class="metric done"><div class="lbl">Durée réalisée</div><div class="val">${fmtDur(g.durD)} <small>h</small></div></div>
+      </div>
+      <div class="progress"><i style="width:${pct}%"></i></div>
+      <div class="stat-sub"><span>Avancement</span><span>${pct}%</span></div>
+    </div>`;
+  }
+  statsView.innerHTML = html;
+}
+
+/* ============================================================
+   RENDER — Statistiques (liste de toutes les semaines)
+   ============================================================ */
+const weeksView = document.getElementById("weeksView");
+function isoWeekNum(d){
+  const tmp = new Date(d); tmp.setDate(tmp.getDate()+3);
+  const week1 = new Date(tmp.getFullYear(),0,4);
+  return 1 + Math.round(((tmp - week1)/86400000 - 3 + ((week1.getDay()+6)%7))/7);
+}
+function renderWeeks(){
+  // regroupe les activités (hors commentaire) par semaine (lundi)
+  const weeks = {}; // key = iso(lundi) -> {start, agg{sport:{dist,dur}}, totDur}
+  for(const a of Object.values(state.activities)){
+    if(a.sport==="commentaire") continue;
+    if(!a.done) continue; // volume RÉALISÉ
+    const wk = startOfWeek(new Date(a.date));
+    const key = isoDate(wk);
+    if(!weeks[key]){
+      const w = { start:wk, totDur:0, agg:{} };
+      for(const k of SPORT_KEYS) w.agg[k] = { dist:0 };
+      weeks[key] = w;
+    }
+    const w = weeks[key];
+    const dur = estDuration(a);
+    w.agg[a.sport].dist += a.distance;
+    w.totDur += dur;
+  }
+  const keys = Object.keys(weeks).sort().reverse(); // plus récentes d'abord
+  let html = `<div class="stats-head"><h2>Statistiques</h2><p>Volume réalisé par semaine</p></div>`;
+  if(keys.length===0){
+    html += `<div class="empty-note">Aucune séance validée pour l'instant.<br>Valide tes séances pour voir tes volumes ici.</div>`;
+    weeksView.innerHTML = html; return;
+  }
+  for(const key of keys){
+    const w = weeks[key]; const end = addDays(w.start,6);
+    const range = `${w.start.getDate()} ${MONTHS[w.start.getMonth()]} – ${end.getDate()} ${MONTHS[end.getMonth()]}`;
+    html += `<button class="week-row" data-week="${key}">
+      <div class="week-row-head">
+        <div class="week-id"><b>S${isoWeekNum(w.start)}</b><span>${range}</span></div>
+        <div class="week-hours">${fmtDur(w.totDur)} <small>h</small></div>
+      </div>
+      <div class="week-vol">
+        ${SPORT_KEYS.map(k=>{
+          const sp=SPORTS[k]; const d=w.agg[k].dist;
+          const v = sp.unit==="m" ? Math.round(d) : +d.toFixed(1);
+          return `<span class="vol-chip" style="--c:${sp.color}"><i></i>${v}<small>${sp.unit==='m'?'m':'km'}</small></span>`;
+        }).join("")}
+      </div>
+    </button>`;
+  }
+  weeksView.innerHTML = html;
+}
+
+function renderAll(){ renderCalendar(); renderStats(); renderWeeks(); }
+
+/* ============================================================
+   SHEET (modale) — ajout / édition / réglages
+   ============================================================ */
+const scrim = document.getElementById("scrim");
+const sheet = document.getElementById("sheet");
+let draft = null; // activité en cours d'édition/création
+
+function openSheet(html){ sheet.innerHTML = `<div class="grabber"></div>` + html; scrim.classList.add("open"); sheet.classList.add("open"); }
+function closeSheet(){ scrim.classList.remove("open"); sheet.classList.remove("open"); draft=null; }
+scrim.addEventListener("click", closeSheet);
+
+/* --- formulaire activité (création + édition) --- */
+function sportPickerHtml(sel){
+  return `<div class="sport-pick" id="sportPick">` +
+    Object.entries(SPORTS).map(([k,v])=>
+      `<button type="button" data-sport="${k}" class="${k===sel?"sel":""}" style="--c:${v.color}">
+        <span class="sd" style="background:${v.color}"></span>${v.label}</button>`).join("") +
+    `</div>`;
+}
+function distUnitFor(sport){ return SPORTS[sport].unit; }
+
+function openActivitySheet(activity, ctx){
+  // activity = objet existant OU null ; ctx = {date, slot} pour création
+  const isNew = !activity;
+  draft = isNew
+    ? { id:null, date:ctx.date, slot:ctx.slot, sport:"course", title:"", distance:"", done:false }
+    : { ...activity, title: activity.title || "" };
+
+  function body(){
+    const sp = draft.sport;
+    const unit = distUnitFor(sp);
+    const isComment = sp==="commentaire";
+    return `
+      <h2>${isNew? (isComment?"Nouveau commentaire":"Nouvelle séance") : (isComment?"Modifier le commentaire":"Modifier la séance")}</h2>
+      <div class="field"><label>Type</label>${sportPickerHtml(sp)}</div>
+      <div class="field"><label>${isComment?"Texte du commentaire":"Titre de la séance"}</label>
+        <input class="txt" id="fTitle" type="text" value="${escapeHtml(draft.title)}" placeholder="${isComment?'Ex : Repos, Indispo, Travail…':SPORTS[sp].label}" maxlength="40">
+      </div>
+      ${isComment ? "" : `<div class="field"><label>Distance</label>
+        <div class="dist-wrap">
+          <input class="txt" id="fDist" type="number" inputmode="decimal" min="0" step="${unit==='m'?100:0.5}" value="${draft.distance}" placeholder="0">
+          <span class="dist-unit" id="fUnit">${unit}</span>
+        </div>
+      </div>`}
+      <div class="field"><label>Quand</label>
+        <div class="two-col">
+          <select class="txt" id="fDate">${dayOptions(draft.date)}</select>
+          <select class="txt" id="fSlot">${SLOTS.map(s=>`<option value="${s.key}" ${s.key===draft.slot?"selected":""}>${s.label}</option>`).join("")}</select>
+        </div>
+      </div>
+      <div class="stack">
+        ${!isNew && !isComment && !draft.done ? `<button class="btn btn-validate" id="bValidate">✓ Valider (effectuée)</button>` : ""}
+        ${!isNew && !isComment && draft.done ? `<button class="btn btn-ghost" id="bUnvalidate">↺ Marquer non effectuée</button>` : ""}
+        <button class="btn btn-primary" id="bSave">${isNew? (isComment?"Ajouter le commentaire":"Ajouter la séance") : "Enregistrer"}</button>
+        ${!isNew ? `<button class="btn btn-danger" id="bDelete">Supprimer</button>` : ""}
+      </div>`;
+  }
+
+  function wire(){
+    document.getElementById("sportPick").addEventListener("click", e=>{
+      const b = e.target.closest("[data-sport]"); if(!b) return;
+      readForm();
+      draft.sport = b.dataset.sport;
+      openSheet(body()); wire();
+    });
+    const submit = ()=>{ if(commit()) { closeSheet(); renderAll(); } };
+    const sv = document.getElementById("bSave"); if(sv) sv.onclick = submit;
+    const va = document.getElementById("bValidate"); if(va) va.onclick = ()=>{ readForm(); draft.done=true; if(commit()){ closeSheet(); renderAll(); } };
+    const uv = document.getElementById("bUnvalidate"); if(uv) uv.onclick = ()=>{ readForm(); draft.done=false; if(commit()){ closeSheet(); renderAll(); } };
+    const dl = document.getElementById("bDelete"); if(dl) dl.onclick = ()=>{
+      if(draft.id){ delete state.activities[draft.id]; save(); } // save() = persistance localStorage (global)
+      closeSheet(); renderAll();
+    };
+  }
+  function readForm(){
+    const t = document.getElementById("fTitle"); if(t) draft.title = t.value.trim();
+    const di = document.getElementById("fDist"); if(di) draft.distance = di.value;
+    const da = document.getElementById("fDate"); if(da) draft.date = da.value;
+    const sl = document.getElementById("fSlot"); if(sl) draft.slot = sl.value;
+  }
+  function commit(){
+    readForm();
+    const isComment = draft.sport==="commentaire";
+    let dist = 0;
+    if(!isComment){
+      dist = parseFloat(draft.distance);
+      if(!isFinite(dist) || dist<=0){
+        const di = document.getElementById("fDist");
+        di.focus(); di.style.borderColor = "#D6452F";
+        return false;
+      }
+    }
+    if(draft.id){
+      const a = state.activities[draft.id];
+      a.sport=draft.sport; a.title=draft.title||null; a.distance=dist; a.date=draft.date; a.slot=draft.slot;
+      a.done = isComment ? false : draft.done;
+    }else{
+      const id = newId();
+      state.activities[id] = { id, date:draft.date, slot:draft.slot, sport:draft.sport, title:draft.title||null, distance:dist, done:false, created:Date.now() };
+    }
+    save();
+    return true;
+  }
+
+  openSheet(body()); wire();
+}
+
+function dayOptions(selDate){
+  let o = "";
+  for(let i=0;i<7;i++){
+    const d = addDays(weekStart,i); const ds = isoDate(d);
+    o += `<option value="${ds}" ${ds===selDate?"selected":""}>${DOW[i].slice(0,3)}. ${d.getDate()}/${d.getMonth()+1}</option>`;
+  }
+  // si la date éditée est hors de la semaine affichée, l'ajouter
+  if(![...Array(7)].some((_,i)=>isoDate(addDays(weekStart,i))===selDate)){
+    const d = new Date(selDate);
+    o = `<option value="${selDate}" selected>${d.getDate()}/${d.getMonth()+1}</option>` + o;
+  }
+  return o;
+}
+
+/* --- réglages allures --- */
+function openSettings(){
+  const s = state.settings;
+  openSheet(`
+    <h2>Réglages — allures de référence</h2>
+    <p class="hint">Servent à estimer la durée des séances dans les onglets Bilan et Statistiques.</p>
+    <div class="settings-grp">
+      <div class="srow"><span class="sd" style="background:${SPORTS.course.color}"></span>
+        <label>Course</label>
+        <input class="txt" id="sCourse" type="text" inputmode="numeric" value="${fmtMMSS(s.paceCourse)}">
+        <span class="u">min/km</span></div>
+      <div class="srow"><span class="sd" style="background:${SPORTS.velo.color}"></span>
+        <label>Vélo</label>
+        <input class="txt" id="sVelo" type="number" inputmode="decimal" min="1" step="0.5" value="${s.vitesseVelo}">
+        <span class="u">km/h</span></div>
+      <div class="srow"><span class="sd" style="background:${SPORTS.natation.color}"></span>
+        <label>Natation</label>
+        <input class="txt" id="sNat" type="text" inputmode="numeric" value="${fmtMMSS(s.paceNat)}">
+        <span class="u">min/100m</span></div>
+    </div>
+    <div class="stack">
+      <button class="btn btn-primary" id="sSave">Enregistrer</button>
+      <button class="btn btn-ghost" id="sReset">Réinitialiser les allures</button>
+    </div>
+
+    <div class="backup-grp">
+      <label class="backup-label">Sauvegarde</label>
+      <p class="hint" style="margin:0 0 12px">Exporte tes séances + réglages dans un fichier, ou restaure une sauvegarde.</p>
+      <div class="btn-row">
+        <button class="btn btn-ghost" id="sExport">⤓ Exporter</button>
+        <button class="btn btn-ghost" id="sImport">⤒ Importer</button>
+      </div>
+    </div>`);
+  document.getElementById("sSave").onclick = ()=>{
+    state.settings.paceCourse = parseMMSS(document.getElementById("sCourse").value);
+    state.settings.vitesseVelo = Math.max(1, parseFloat(document.getElementById("sVelo").value)||30);
+    state.settings.paceNat = parseMMSS(document.getElementById("sNat").value);
+    save(); closeSheet(); renderStats();
+  };
+  document.getElementById("sReset").onclick = ()=>{
+    state.settings = defaultState().settings; save(); openSettings();
+  };
+  document.getElementById("sExport").onclick = exportData;
+  document.getElementById("sImport").onclick = importDataPrompt;
+}
+
+/* --- sauvegarde : export / import JSON --- */
+function exportData(){
+  try{
+    const data = JSON.stringify(state, null, 2);
+    const blob = new Blob([data], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const d = new Date();
+    const stamp = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    const a = document.createElement("a");
+    a.href = url; a.download = "triplan-sauvegarde-"+stamp+".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  }catch(e){ alert("Export impossible : "+e.message); }
+}
+function importDataPrompt(){
+  const inp = document.createElement("input");
+  inp.type="file"; inp.accept=".json,application/json";
+  inp.onchange = ()=>{
+    const file = inp.files && inp.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{
+        const data = JSON.parse(reader.result);
+        if(!data || typeof data!=="object" || !data.activities || typeof data.activities!=="object"){
+          throw new Error("fichier de sauvegarde non reconnu");
+        }
+        const n = Object.keys(data.activities).length;
+        if(!confirm("Importer "+n+" séance(s) ?\nCela remplacera toutes les données actuelles de cet appareil.")) return;
+        state = { version:1, settings: data.settings||defaultState().settings, activities: data.activities };
+        save(); closeSheet(); renderAll();
+        alert(n+" séance(s) importée(s).");
+      }catch(e){ alert("Import impossible : "+e.message); }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+
+/* ============================================================
+   Interactions calendrier : tap (ajout/édition) + drag & drop
+   ============================================================ */
+let drag = null; // {id, ghost, startX, startY, started, timer, startScroll}
+const main = document.getElementById("main");
+const DRAG_HOLD = 200;   // ms avant prise (long press)
+const MOVE_CANCEL = 12;  // px de mouvement annulant la prise (=> scroll)
+
+calView.addEventListener("pointerdown", e=>{
+  const card = e.target.closest(".act");
+  if(!card){ return; }
+  const id = card.dataset.id;
+  drag = { id, card, startX:e.clientX, startY:e.clientY, started:false, timer:null,
+           startScroll: main.scrollTop };
+  drag.timer = setTimeout(()=> beginDrag(e), DRAG_HOLD);
+}, {passive:true});
+
+function beginDrag(e){
+  if(!drag) return;
+  drag.started = true;
+  const card = drag.card;
+  const r = card.getBoundingClientRect();
+  const ghost = card.cloneNode(true);
+  ghost.classList.add("act-ghost");
+  ghost.style.width = r.width + "px";
+  ghost.style.left = r.left + "px";
+  ghost.style.top = r.top + "px";
+  document.body.appendChild(ghost);
+  drag.ghost = ghost;
+  drag.offX = drag.startX - r.left;
+  drag.offY = drag.startY - r.top;
+  card.classList.add("dragging");
+  if(navigator.vibrate) navigator.vibrate(10);
+}
+
+window.addEventListener("pointermove", e=>{
+  if(!drag) return;
+  const dx = e.clientX-drag.startX, dy = e.clientY-drag.startY;
+  if(!drag.started){
+    // mouvement avant prise => l'utilisateur scrolle, on annule la prise
+    if(Math.hypot(dx,dy) > MOVE_CANCEL){ clearTimeout(drag.timer); drag = null; }
+    return;
+  }
+  e.preventDefault();
+  drag.ghost.style.left = (e.clientX - drag.offX) + "px";
+  drag.ghost.style.top  = (e.clientY - drag.offY) + "px";
+  highlightSlot(e.clientX, e.clientY);
+}, {passive:false});
+
+function highlightSlot(x,y){
+  document.querySelectorAll(".slot.drop-target").forEach(s=>s.classList.remove("drop-target"));
+  drag.ghost.style.visibility="hidden";
+  const el = document.elementFromPoint(x,y);
+  drag.ghost.style.visibility="";
+  const slot = el && el.closest(".slot");
+  if(slot){ slot.classList.add("drop-target"); drag.target = slot; }
+  else drag.target = null;
+}
+
+window.addEventListener("pointerup", e=>{
+  if(!drag) return;
+  clearTimeout(drag.timer);
+  const id = drag.id;
+  const wasStarted = drag.started;
+  if(wasStarted){
+    drag.ghost.style.visibility="hidden";
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const slot = el && el.closest(".slot");
+    if(slot){
+      const a = state.activities[id];
+      if(a){ a.date = slot.dataset.date; a.slot = slot.dataset.slot; save(); }
+    }
+    cleanupDrag();
+    renderAll();
+  } else {
+    // simple tap => édition
+    cleanupDrag();
+    const a = state.activities[id];
+    if(a) openActivitySheet(a, null);
+  }
+});
+window.addEventListener("pointercancel", ()=>{ if(drag){ clearTimeout(drag.timer); cleanupDrag(); } });
+
+function cleanupDrag(){
+  if(drag){
+    if(drag.ghost) drag.ghost.remove();
+    if(drag.card) drag.card.classList.remove("dragging");
+  }
+  document.querySelectorAll(".slot.drop-target").forEach(s=>s.classList.remove("drop-target"));
+  drag = null;
+}
+
+/* clic "ajouter" sur un créneau */
+calView.addEventListener("click", e=>{
+  const add = e.target.closest("[data-add]");
+  if(add){ openActivitySheet(null, { date:add.dataset.date, slot:add.dataset.slot }); }
+});
+
+/* clic sur une semaine (onglet Statistiques) => ouvre le Bilan de cette semaine */
+weeksView.addEventListener("click", e=>{
+  const row = e.target.closest("[data-week]"); if(!row) return;
+  weekStart = startOfWeek(new Date(row.dataset.week + "T00:00:00"));
+  renderAll();
+  activateTab("bilan");
+});
+
+/* ============================================================
+   Navigation : semaines, swipe, onglets, réglages
+   ============================================================ */
+document.getElementById("prevWeek").onclick = ()=>{ weekStart = addDays(weekStart,-7); renderAll(); };
+document.getElementById("nextWeek").onclick = ()=>{ weekStart = addDays(weekStart,7); renderAll(); };
+document.querySelector(".weeknav .range").onclick = ()=>{ weekStart = startOfWeek(new Date()); renderAll(); };
+document.getElementById("btnSettings").onclick = openSettings;
+
+// onglets : cal=Calendrier, bilan=Bilan(semaine), stats=Statistiques(toutes semaines)
+function activateTab(t){
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active", x.dataset.tab===t));
+  document.getElementById("calView").classList.toggle("active", t==="cal");
+  document.getElementById("statsView").classList.toggle("active", t==="bilan");
+  document.getElementById("weeksView").classList.toggle("active", t==="stats");
+  // la barre de semaine ne concerne que Calendrier & Bilan
+  document.getElementById("weeknav").style.display = (t==="stats") ? "none" : "";
+  if(t==="bilan") renderStats();
+  if(t==="stats") renderWeeks();
+  main.scrollTop = 0;
+}
+document.querySelectorAll(".tab").forEach(tab=> tab.onclick = ()=> activateTab(tab.dataset.tab));
+
+// swipe horizontal pour changer de semaine (onglet calendrier)
+let sw=null;
+main.addEventListener("touchstart", e=>{
+  if(e.touches.length!==1 || drag) { sw=null; return; }
+  sw = { x:e.touches[0].clientX, y:e.touches[0].clientY, t:Date.now() };
+},{passive:true});
+main.addEventListener("touchend", e=>{
+  if(!sw || drag) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - sw.x, dy = t.clientY - sw.y;
+  if(Math.abs(dx)>70 && Math.abs(dx)>Math.abs(dy)*1.8 && (Date.now()-sw.t)<600){
+    if(!document.getElementById("calView").classList.contains("active")) return;
+    weekStart = addDays(weekStart, dx<0 ? 7 : -7);
+    renderAll();
+  }
+  sw=null;
+},{passive:true});
+
+/* ---------- Go ---------- */
+renderAll();
+</script>
+</body>
+</html>
