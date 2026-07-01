@@ -115,7 +115,7 @@
     color:color-mix(in srgb,var(--c) 72%,#1a2230);
     border:1.5px dashed color-mix(in srgb,var(--c) 55%,#fff);
     transition:transform .12s,box-shadow .12s;
-    touch-action:manipulation;user-select:none;
+    touch-action:none;user-select:none;
   }
   .act.done{
     background:var(--c);color:#fff;border:1.5px solid var(--c);
@@ -126,6 +126,8 @@
   .act .d{font-variant-numeric:tabular-nums;opacity:.92;margin-top:1px;font-weight:600;}
   .act.comment .t{font-style:italic;font-weight:600;}
   .act.dragging{opacity:.35;}
+  .edit-dur{cursor:pointer;}
+  .edit-dur .edit-ic{font-size:11px;opacity:.6;margin-left:2px;}
   .act-ghost{
     position:fixed;z-index:200;pointer-events:none;width:120px;
     box-shadow:0 12px 28px rgba(16,32,48,.28);transform:scale(1.04) rotate(-1.5deg);
@@ -320,7 +322,8 @@ function defaultState(){
   return {
     version:1,
     settings:{ paceCourse:300, vitesseVelo:30, paceNat:120 }, // sec/km, km/h, sec/100m
-    activities:{}
+    activities:{},
+    hourOverrides:{} // { [lundiISO]: { course?: sec, velo?: sec, natation?: sec } } — durées réalisées corrigées manuellement
   };
 }
 // état initial pré-rempli depuis l'Excel (utilisé si aucune donnée locale)
@@ -338,6 +341,7 @@ function load(){
     const s = JSON.parse(raw);
     if(!s.settings) s.settings = defaultState().settings;
     if(!s.activities) s.activities = {};
+    if(!s.hourOverrides) s.hourOverrides = {};
     return s;
   }catch(e){ return defaultState(); }
 }
@@ -386,6 +390,29 @@ function estDuration(act){
   if(act.sport==="velo")     return s.vitesseVelo>0 ? (act.distance / s.vitesseVelo) * 3600 : 0;
   if(act.sport==="natation") return (act.distance/100) * s.paceNat;
   return 0;
+}
+
+/* ---------- Heures réalisées (corrigées manuellement, par semaine/sport) ---------- */
+function realizedDur(weekKey, sport, computedSec){
+  const ov = state.hourOverrides[weekKey];
+  return (ov && ov[sport]!=null) ? ov[sport] : computedSec;
+}
+function setRealizedDur(weekKey, sport, sec){
+  if(!state.hourOverrides[weekKey]) state.hourOverrides[weekKey] = {};
+  state.hourOverrides[weekKey][sport] = sec;
+  save();
+}
+function clearRealizedDur(weekKey, sport){
+  if(state.hourOverrides[weekKey]){
+    delete state.hourOverrides[weekKey][sport];
+    if(Object.keys(state.hourOverrides[weekKey]).length===0) delete state.hourOverrides[weekKey];
+  }
+  save();
+}
+function parseHM(str){ // "h:mm" -> secondes
+  const p = String(str).trim().split(":");
+  if(p.length===2){ const h=parseInt(p[0],10)||0, m=parseInt(p[1],10)||0; return h*3600+m*60; }
+  const f = parseFloat(str); return isFinite(f) ? Math.round(f*3600) : 0;
 }
 
 /* ---------- Activity queries ---------- */
@@ -465,14 +492,15 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<
    ============================================================ */
 const statsView = document.getElementById("statsView");
 function bilanWeekHtml(monday){
+  const weekKey = isoDate(monday);
   const acts = weekActsFor(monday).filter(a => a.sport!=="commentaire");
   const end = addDays(monday,6);
   const agg = {}; for(const k of SPORT_KEYS) agg[k] = { distP:0,distD:0,durP:0,durD:0 };
-  let totDurP=0, totDurD=0;
+  let totDurP=0;
   for(const a of acts){
     const g = agg[a.sport]; if(!g) continue; const dur = estDuration(a);
     g.distP += a.distance; g.durP += dur; totDurP += dur;
-    if(a.done){ g.distD += a.distance; g.durD += dur; totDurD += dur; }
+    if(a.done){ g.distD += a.distance; g.durD += dur; }
   }
   let html = `<div class="stats-head">
     <h2>Bilan de la semaine</h2>
@@ -483,6 +511,9 @@ function bilanWeekHtml(monday){
     html += `<div class="empty-note">Aucune séance cette semaine.<br>Ajoute des activités dans le calendrier.</div>`;
     return html;
   }
+
+  let totDurD = 0;
+  for(const k of SPORT_KEYS) totDurD += realizedDur(weekKey, k, agg[k].durD);
 
   // total temps EN HAUT
   html += `<div class="stat-card total-card">
@@ -498,6 +529,8 @@ function bilanWeekHtml(monday){
     const distLabel = u==="m" ? "m" : "km";
     const distP = u==="m" ? Math.round(g.distP) : +g.distP.toFixed(1);
     const distD = u==="m" ? Math.round(g.distD) : +g.distD.toFixed(1);
+    const durD = realizedDur(weekKey, k, g.durD);
+    const hasOverride = state.hourOverrides[weekKey] && state.hourOverrides[weekKey][k]!=null;
     const pct = g.distP>0 ? Math.round(g.distD/g.distP*100) : 0;
     html += `<div class="stat-card" style="--c:${sp.color}">
       <div class="stat-top"><span class="stat-dot"></span><h3>${sp.label}</h3></div>
@@ -505,7 +538,9 @@ function bilanWeekHtml(monday){
         <div class="metric"><div class="lbl">Distance prévue</div><div class="val">${distP} <small>${distLabel}</small></div></div>
         <div class="metric done"><div class="lbl">Réalisée</div><div class="val">${distD} <small>${distLabel}</small></div></div>
         <div class="metric"><div class="lbl">Durée estimée</div><div class="val">${fmtDur(g.durP)} <small>h</small></div></div>
-        <div class="metric done"><div class="lbl">Durée réalisée</div><div class="val">${fmtDur(g.durD)} <small>h</small></div></div>
+        <div class="metric done"><div class="lbl">Durée réalisée${hasOverride?" ✎":""}</div>
+          <div class="val edit-dur" data-edit-dur data-week="${weekKey}" data-sport="${k}">${fmtDur(durD)} <small>h</small> <span class="edit-ic">✎</span></div>
+        </div>
       </div>
       <div class="progress"><i style="width:${pct}%"></i></div>
       <div class="stat-sub"><span>Avancement</span><span>${pct}%</span></div>
@@ -515,6 +550,34 @@ function bilanWeekHtml(monday){
 }
 function renderStats(){
   statsView.innerHTML = `<div class="wk-pane">${bilanWeekHtml(weekStart)}</div>`;
+}
+
+/* édition manuelle de la durée réalisée d'un sport (heures réellement effectuées) */
+statsView.addEventListener("click", e=>{
+  const el = e.target.closest("[data-edit-dur]"); if(!el) return;
+  openHourOverrideSheet(el.dataset.week, el.dataset.sport);
+});
+function openHourOverrideSheet(weekKey, sport){
+  const sp = SPORTS[sport];
+  const cur = state.hourOverrides[weekKey] && state.hourOverrides[weekKey][sport];
+  const hasOverride = cur!=null;
+  const html = `
+    <h2>Durée réalisée — ${sp.label}</h2>
+    <div class="field"><label>Heures réellement effectuées (h:mm)</label>
+      <input class="txt" id="fHours" type="text" inputmode="numeric" value="${hasOverride?fmtDur(cur):""}" placeholder="ex : 1:30">
+    </div>
+    <div class="stack">
+      <button class="btn btn-primary" id="bSaveHours">Enregistrer</button>
+      ${hasOverride?`<button class="btn btn-ghost" id="bResetHours">↺ Revenir à l'estimation</button>`:""}
+    </div>`;
+  openSheet(html);
+  document.getElementById("bSaveHours").onclick = ()=>{
+    const v = document.getElementById("fHours").value;
+    setRealizedDur(weekKey, sport, parseHM(v));
+    closeSheet(); renderStats(); renderWeeks();
+  };
+  const rb = document.getElementById("bResetHours");
+  if(rb) rb.onclick = ()=>{ clearRealizedDur(weekKey, sport); closeSheet(); renderStats(); renderWeeks(); };
 }
 
 /* ============================================================
@@ -536,16 +599,20 @@ function renderWeeks(){
     const key = isoDate(wk);
     if(!weeks[key]){
       const w = { start:wk, totDur:0, agg:{} };
-      for(const k of SPORT_KEYS) w.agg[k] = { dist:0 };
+      for(const k of SPORT_KEYS) w.agg[k] = { dist:0, dur:0 };
       weeks[key] = w;
     }
     const w = weeks[key];
     const dur = estDuration(a);
     w.agg[a.sport].dist += a.distance;
-    w.totDur += dur;
+    w.agg[a.sport].dur += dur;
+  }
+  for(const key of Object.keys(weeks)){
+    const w = weeks[key];
+    w.totDur = SPORT_KEYS.reduce((s,k)=> s + realizedDur(key, k, w.agg[k].dur), 0);
   }
   const keys = Object.keys(weeks).sort().reverse(); // plus récentes d'abord
-  let html = `<div class="stats-head"><h2>Statistiques</h2><p>Volume réalisé par semaine</p></div>`;
+  let html = `<div class="stats-head"><h2>Statistiques</h2><p>Volume et heures réalisés par semaine</p></div>`;
   if(keys.length===0){
     html += `<div class="empty-note">Aucune séance validée pour l'instant.<br>Valide tes séances pour voir tes volumes ici.</div>`;
     weeksView.innerHTML = html; return;
@@ -559,10 +626,11 @@ function renderWeeks(){
         <div class="week-hours">${fmtDur(w.totDur)} <small>h</small></div>
       </div>
       <div class="week-vol">
-        ${SPORT_KEYS.map(k=>{
+        ${SPORT_KEYS.filter(k=>w.agg[k].dist>0 || realizedDur(key,k,w.agg[k].dur)>0).map(k=>{
           const sp=SPORTS[k]; const d=w.agg[k].dist;
           const v = sp.unit==="m" ? Math.round(d) : +d.toFixed(1);
-          return `<span class="vol-chip" style="--c:${sp.color}"><i></i>${v}<small>${sp.unit==='m'?'m':'km'}</small></span>`;
+          const dur = realizedDur(key, k, w.agg[k].dur);
+          return `<span class="vol-chip" style="--c:${sp.color}"><i></i>${v}<small>${sp.unit==='m'?'m':'km'}</small> · ${fmtDur(dur)}<small>h</small></span>`;
         }).join("")}
       </div>
     </button>`;
@@ -807,13 +875,15 @@ let drag = null; // {id, ghost, startX, startY, started, timer, startScroll}
 const main = document.getElementById("main");
 const DRAG_HOLD = 200;   // ms avant prise (long press)
 const MOVE_CANCEL = 12;  // px de mouvement annulant la prise (=> scroll)
+const EDGE_ZONE = 60;    // px depuis le haut/bas de "main" déclenchant l'auto-scroll
+const EDGE_MAX_SPEED = 14; // px par frame au bord extrême
 
 calView.addEventListener("pointerdown", e=>{
   const card = e.target.closest(".act");
   if(!card){ return; }
   const id = card.dataset.id;
   drag = { id, card, startX:e.clientX, startY:e.clientY, started:false, timer:null,
-           startScroll: main.scrollTop };
+           startScroll: main.scrollTop, lastX:e.clientX, lastY:e.clientY, scrollRAF:null };
   drag.timer = setTimeout(()=> beginDrag(e), DRAG_HOLD);
 }, {passive:true});
 
@@ -833,6 +903,23 @@ function beginDrag(e){
   drag.offY = drag.startY - r.top;
   card.classList.add("dragging");
   if(navigator.vibrate) navigator.vibrate(10);
+  drag.scrollRAF = requestAnimationFrame(autoScrollTick);
+}
+
+// fait défiler "main" quand le doigt (avec l'activité tenue) approche du haut/bas
+// de la zone visible, indépendamment du déplacement de la carte elle-même
+function autoScrollTick(){
+  if(!drag || !drag.started){ return; }
+  const r = main.getBoundingClientRect();
+  const y = drag.lastY;
+  let dy = 0;
+  if(y < r.top + EDGE_ZONE) dy = -EDGE_MAX_SPEED * (1 - Math.max(0,y-r.top)/EDGE_ZONE);
+  else if(y > r.bottom - EDGE_ZONE) dy = EDGE_MAX_SPEED * (1 - Math.max(0,r.bottom-y)/EDGE_ZONE);
+  if(dy !== 0){
+    main.scrollTop += dy;
+    highlightSlot(drag.lastX, drag.lastY);
+  }
+  drag.scrollRAF = requestAnimationFrame(autoScrollTick);
 }
 
 window.addEventListener("pointermove", e=>{
@@ -844,6 +931,7 @@ window.addEventListener("pointermove", e=>{
     return;
   }
   e.preventDefault();
+  drag.lastX = e.clientX; drag.lastY = e.clientY;
   drag.ghost.style.left = (e.clientX - drag.offX) + "px";
   drag.ghost.style.top  = (e.clientY - drag.offY) + "px";
   highlightSlot(e.clientX, e.clientY);
@@ -885,6 +973,7 @@ window.addEventListener("pointercancel", ()=>{ if(drag){ clearTimeout(drag.timer
 
 function cleanupDrag(){
   if(drag){
+    if(drag.scrollRAF) cancelAnimationFrame(drag.scrollRAF);
     if(drag.ghost) drag.ghost.remove();
     if(drag.card) drag.card.classList.remove("dragging");
   }
@@ -936,7 +1025,7 @@ function activeSwipeView(){
 }
 let sw=null;
 main.addEventListener("touchstart", e=>{
-  if(e.touches.length!==1 || drag){ sw=null; return; }
+  if(e.touches.length!==1 || drag || e.target.closest(".act")){ sw=null; return; }
   const info = activeSwipeView();
   if(!info){ sw=null; return; }
   sw = { x:e.touches[0].clientX, y:e.touches[0].clientY, info,
