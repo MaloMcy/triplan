@@ -33,6 +33,9 @@
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html,body{margin:0;height:100%;}
+  body.dragging-active,body.dragging-active *{
+    user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  }
   body{
     background:var(--bg);color:var(--ink);
     font-size:15px;line-height:1.4;
@@ -902,6 +905,8 @@ function beginDrag(e){
   drag.offX = drag.startX - r.left;
   drag.offY = drag.startY - r.top;
   card.classList.add("dragging");
+  document.body.classList.add("dragging-active");
+  const sel = window.getSelection(); if(sel) sel.removeAllRanges();
   if(navigator.vibrate) navigator.vibrate(10);
   drag.scrollRAF = requestAnimationFrame(autoScrollTick);
 }
@@ -935,6 +940,7 @@ window.addEventListener("pointermove", e=>{
   drag.ghost.style.left = (e.clientX - drag.offX) + "px";
   drag.ghost.style.top  = (e.clientY - drag.offY) + "px";
   highlightSlot(e.clientX, e.clientY);
+  const sel = window.getSelection(); if(sel && sel.rangeCount) sel.removeAllRanges();
 }, {passive:false});
 
 function highlightSlot(x,y){
@@ -977,6 +983,7 @@ function cleanupDrag(){
     if(drag.ghost) drag.ghost.remove();
     if(drag.card) drag.card.classList.remove("dragging");
   }
+  document.body.classList.remove("dragging-active");
   document.querySelectorAll(".slot.drop-target").forEach(s=>s.classList.remove("drop-target"));
   drag = null;
 }
